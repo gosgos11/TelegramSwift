@@ -45,7 +45,7 @@ private var telegramUIDeclaredEncodables: Void = {
     declareEncodable(DefaultCloudTheme.self, f: { DefaultCloudTheme(decoder: $0) })
     declareEncodable(LocalWallapper.self, f: { LocalWallapper(decoder: $0) })
     declareEncodable(LocalAccentColor.self, f: { LocalAccentColor(decoder: $0) })
-    declareEncodable(WalletPasscodeTimeout.self, f: { WalletPasscodeTimeout(decoder: $0) })
+   // declareEncodable(WalletPasscodeTimeout.self, f: { WalletPasscodeTimeout(decoder: $0) })
     declareEncodable(PasscodeSettings.self, f: { PasscodeSettings(decoder: $0) })
     declareEncodable(CachedInstantPage.self, f: { CachedInstantPage(decoder: $0) })
     declareEncodable(RecentSettingsSearchQueryItem.self, f: { RecentSettingsSearchQueryItem(decoder: $0) })

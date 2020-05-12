@@ -231,11 +231,16 @@ public class TGClipView: NSClipView,CALayerDelegate {
                 } else {
                     _ = destination.x - o.x
                     let ydif = destination.y - o.y
-                    
+                    let xdif = destination.x - o.x
+
          
                     if ydif != 0 {
                         let incY = abs(ydif) - abs(ydif + 1)
                         o.y -= incY
+                    }
+                    if xdif != 0 {
+                        let incX = abs(xdif) - abs(xdif + 1)
+                        o.x -= incX
                     }
                     super.scroll(to: o)
                 }
@@ -307,24 +312,29 @@ public class TGClipView: NSClipView,CALayerDelegate {
     
     
     override public func scroll(to newOrigin:NSPoint) -> Void {
-        
         if (self.shouldAnimateOriginChange) {
             self.shouldAnimateOriginChange = false;
             self.destinationOrigin = newOrigin;
             self.beginScroll()
         } else {
-            self.destinationOrigin = newOrigin;
-            self.endScroll()
-            super.scroll(to: newOrigin)
-            Queue.mainQueue().justDispatch {
-                self.handleCompletionIfNeeded(withSuccess: true)
+            if !isAnimateScrolling {
+                self.destinationOrigin = newOrigin;
+                self.endScroll()
+                super.scroll(to: newOrigin)
+                Queue.mainQueue().justDispatch {
+                    self.handleCompletionIfNeeded(withSuccess: true)
+                }
             }
         }
         
     }
     
     public override var bounds: NSRect {
-        didSet {
+        set {
+            super.bounds = newValue
+        }
+        get {
+            return super.bounds
         }
     }
     

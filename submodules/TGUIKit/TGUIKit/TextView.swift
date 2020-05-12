@@ -580,8 +580,10 @@ public final class TextViewLayout : Equatable {
             }
             
             for i in 0 ..< rects.count {
-                rects[i] = rects[i].insetBy(dx: 0, dy: floor((rects[i].height - 20.0) / 2.0))
-                rects[i].size.height = 22
+                let height = rects[i].size.height + 7
+                rects[i] = rects[i].insetBy(dx: 0, dy: floor((rects[i].height - height) / 2.0))
+                rects[i].size.height = height
+                
                 rects[i].origin.x = floor((layoutSize.width - rects[i].width) / 2.0)
                 rects[i].size.width += 20
             }
@@ -649,24 +651,45 @@ public final class TextViewLayout : Equatable {
         calculateLayout(isBigEmoji: isBigEmoji)
 
         strokeRects.removeAll()
+        
         attributedString.enumerateAttribute(NSAttributedString.Key.link, in: attributedString.range, options: NSAttributedString.EnumerationOptions(rawValue: 0), using: { value, range, stop in
             if let value = value {
-                for line in lines {
-                    let lineRange = NSIntersectionRange(range, line.range)
-                    if lineRange.length != 0 {
-                        var leftOffset: CGFloat = 0.0
-                        if lineRange.location != line.range.location {
-                            leftOffset = floor(CTLineGetOffsetForStringIndex(line.line, lineRange.location, nil))
-                        }
-                        let rightOffset: CGFloat = ceil(CTLineGetOffsetForStringIndex(line.line, lineRange.location + lineRange.length, nil))
-                        
-                        
-                        let color: NSColor = attributedString.attribute(NSAttributedString.Key.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor ?? presentation.colors.link
-                        if interactions.isDomainLink(value) && strokeLinks {
+                if interactions.isDomainLink(value) && strokeLinks {
+                    for line in lines {
+                        let lineRange = NSIntersectionRange(range, line.range)
+                        if lineRange.length != 0 {
+                            var leftOffset: CGFloat = 0.0
+                            if lineRange.location != line.range.location {
+                                leftOffset = floor(CTLineGetOffsetForStringIndex(line.line, lineRange.location, nil))
+                            }
+                            let rightOffset: CGFloat = ceil(CTLineGetOffsetForStringIndex(line.line, lineRange.location + lineRange.length, nil))
+                            
+                            let color: NSColor = attributedString.attribute(NSAttributedString.Key.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor ?? presentation.colors.link
                             let rect = NSMakeRect(line.frame.minX + leftOffset, line.frame.minY + 1, rightOffset - leftOffset, 1.0)
                             strokeRects.append((rect, color))
+                            
+                            if !disableTooltips, interactions.resolveLink(value) != attributedString.string.nsstring.substring(with: range) {
+                                var leftOffset: CGFloat = 0.0
+                                if lineRange.location != line.range.location {
+                                    leftOffset = floor(CTLineGetOffsetForStringIndex(line.line, lineRange.location, nil))
+                                }
+                                let rightOffset: CGFloat = ceil(CTLineGetOffsetForStringIndex(line.line, lineRange.location + lineRange.length, nil))
+                                
+                                toolTipRects.append(NSMakeRect(line.frame.minX + leftOffset, line.frame.minY - line.frame.height, rightOffset - leftOffset, line.frame.height))
+                            }
                         }
-                        if !disableTooltips, interactions.resolveLink(value) != attributedString.string.nsstring.substring(with: range) {
+                    }
+                }
+                if !disableTooltips, interactions.resolveLink(value) != attributedString.string.nsstring.substring(with: range) {
+                    for line in lines {
+                        let lineRange = NSIntersectionRange(range, line.range)
+                        if lineRange.length != 0 {
+                            var leftOffset: CGFloat = 0.0
+                            if lineRange.location != line.range.location {
+                                leftOffset = floor(CTLineGetOffsetForStringIndex(line.line, lineRange.location, nil))
+                            }
+                            let rightOffset: CGFloat = ceil(CTLineGetOffsetForStringIndex(line.line, lineRange.location + lineRange.length, nil))
+                            
                             toolTipRects.append(NSMakeRect(line.frame.minX + leftOffset, line.frame.minY - line.frame.height, rightOffset - leftOffset, line.frame.height))
                         }
                     }
@@ -684,8 +707,6 @@ public final class TextViewLayout : Equatable {
                         if lineRange.location != line.range.location {
                             leftOffset += floor(CTLineGetOffsetForStringIndex(line.line, lineRange.location, nil))
                         }
-                        
-                        
                         let rect = NSMakeRect(line.frame.minX + leftOffset + 10, line.frame.minY - (size.height - 7) + 2, size.width - 8, size.height - 8)
                         hexColorsRect.append((rect, color, attributedString.attributedSubstring(from: range).string))
                     }
@@ -992,7 +1013,12 @@ public enum CursorSelectAlignment {
 public struct TextSelectedRange: Equatable {
     
     
-    public var range:NSRange = NSMakeRange(NSNotFound, 0)
+    public var range:NSRange = NSMakeRange(NSNotFound, 0) {
+        didSet {
+            var bp:Int = 0
+            bp += 1
+        }
+    }
     public var color:NSColor = presentation.colors.selectText
     public var def:Bool = true
     
@@ -1104,8 +1130,6 @@ public class TextView: Control, NSViewToolTipOwner {
                     }
                 }
             } else {
-                ctx.setAllowsFontSubpixelPositioning(true)
-                ctx.setShouldSubpixelPositionFonts(true)
                 
                 ctx.setAllowsAntialiasing(true)
                 ctx.setShouldAntialias(true)
@@ -1171,6 +1195,13 @@ public class TextView: Control, NSViewToolTipOwner {
                             let endOffset = CTLineGetOffsetForStringIndex(line, endLineIndex, nil);
                             
                             width = endOffset - startOffset;
+                            
+                            
+                            if beginLineIndex == -1 {
+                                beginLineIndex = 0
+                            } else if beginLineIndex >= layout.attributedString.length {
+                                beginLineIndex = layout.attributedString.length - 1
+                            }
                             
                             let blockValue:CGFloat = layout.mayBlocked ? CGFloat((layout.attributedString.attribute(.preformattedPre, at: beginLineIndex, effectiveRange: nil) as? NSNumber)?.floatValue ?? 0) : 0
                             
@@ -1432,7 +1463,11 @@ public class TextView: Control, NSViewToolTipOwner {
         needsDisplay = true
     }
     
+    private var locationInWindow:NSPoint? = nil
+    
     func _mouseDown(with event: NSEvent) -> Void {
+        
+        self.locationInWindow = event.locationInWindow
         
         if !isSelectable || !userInteractionEnabled || event.modifierFlags.contains(.shift) {
             super.mouseDown(with: event)
@@ -1457,6 +1492,13 @@ public class TextView: Control, NSViewToolTipOwner {
     func _mouseDragged(with event: NSEvent) -> Void {
         if !isSelectable || !userInteractionEnabled {
             return
+        }
+        if let locationInWindow = self.locationInWindow {
+            let old = (ceil(locationInWindow.x), ceil(locationInWindow.y))
+            let new = (ceil(event.locationInWindow.x), round(event.locationInWindow.y))
+            if abs(old.0 - new.0) <= 1 && abs(old.1 - new.1) <= 1 {
+                return
+            }
         }
         
         endSelect = self.convert(event.locationInWindow, from: nil)
@@ -1496,6 +1538,8 @@ public class TextView: Control, NSViewToolTipOwner {
     
     
     public override func mouseUp(with event: NSEvent) {
+        
+        self.locationInWindow = nil
         
         if let layout = layout, userInteractionEnabled {
             let point = self.convert(event.locationInWindow, from: nil)

@@ -202,6 +202,8 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
                     activity = theme.activity(key: 12 + (theme.dark ? 10 : 20), foregroundColor: theme.chatList.activityPinnedColor, backgroundColor: theme.chatList.pinnedBackgroundColor)
                 } else if contextMenu != nil {
                     activity = theme.activity(key: 13 + (theme.dark ? 10 : 20), foregroundColor: theme.chatList.activityContextMenuColor, backgroundColor: theme.chatList.contextMenuBackgroundColor)
+                } else if self.containerView.activeDragging || item.isHighlighted {
+                    activity = theme.activity(key: 13 + (theme.dark ? 10 : 20), foregroundColor: theme.chatList.activityColor, backgroundColor: theme.chatList.activeDraggingBackgroundColor)
                 } else {
                     activity = theme.activity(key: 14 + (theme.dark ? 10 : 20), foregroundColor: theme.chatList.activityColor, backgroundColor: theme.colors.background)
                 }
@@ -278,7 +280,7 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
                 return theme.colors.grayBackground
             }
             if item.isHighlighted && !item.isSelected {
-                return theme.colors.grayForeground
+                return theme.chatList.activeDraggingBackgroundColor
             }
             if item.context.sharedContext.layout == .single, item.isSelected {
                 return theme.chatList.singleLayoutSelectedBackgroundColor
@@ -360,7 +362,7 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
                     }
                     
                     if let messageLayout = item.ctxMessageLayout, !hiddemMessage {
-                        messageLayout.1.draw(NSMakeRect(item.leftInset, displayLayout.0.size.height + item.margin + 3 , messageLayout.0.size.width, messageLayout.0.size.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
+                        messageLayout.1.draw(NSMakeRect(item.leftInset, displayLayout.0.size.height + item.margin + 1, messageLayout.0.size.width, messageLayout.0.size.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
                     }
                     
                     if item.isMuted {
@@ -455,6 +457,8 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
 
     override func updateColors() {
         super.updateColors()
+        let inputActivities = self.inputActivities
+        self.inputActivities = inputActivities
         self.containerView.background = backdorColor
         expandView?.backgroundColor = theme.colors.grayBackground
     }
@@ -727,27 +731,31 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
             
             archive.set(handler: { [weak self] _ in
                 guard let item = self?.item as? ChatListRowItem else {return}
-                item.toggleArchive()
                 self?.endRevealState = nil
+                item.toggleArchive()
             }, for: .Click)
             
             mute.set(handler: { [weak self] _ in
                 guard let item = self?.item as? ChatListRowItem else {return}
-                item.toggleMuted()
                 self?.endRevealState = nil
+                item.toggleMuted()
             }, for: .Click)
             
             delete.set(handler: { [weak self] _ in
                 guard let item = self?.item as? ChatListRowItem else {return}
-                item.delete()
                 self?.endRevealState = nil
+                item.delete()
             }, for: .Click)
             
             
-            
             revealRightView.addSubview(pin)
+
             revealRightView.addSubview(delete)
-            revealRightView.addSubview(archive)
+            
+            if item.filter == nil {
+                revealRightView.addSubview(archive)
+            }
+            
             
             
             revealLeftView.addSubview(mute)
@@ -756,7 +764,7 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
             
             
             revealLeftView.backgroundColor = unreadBackground
-            revealRightView.backgroundColor = theme.colors.revealAction_inactive_background
+            revealRightView.backgroundColor = item.filter == nil ? theme.colors.revealAction_inactive_background : theme.colors.revealAction_destructive_background
             
             
             unread.setFrameSize(frame.height, frame.height)
@@ -1129,12 +1137,26 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
 
                 
                 if invokeRightAction {
-                    animateRightLongReveal({ completed in
-                        if invokeRightAction {
-                            last?.send(event: .Click)
-                            last = nil
-                        }
-                    })
+                    if self.revealRightView.subviews.count < 3 {
+                        failed({ completed in
+                            if invokeRightAction {
+                                DispatchQueue.main.async {
+                                    last?.send(event: .Click)
+                                    last = nil
+                                }
+                            }
+                        })
+                    } else {
+                        animateRightLongReveal({ completed in
+                            if invokeRightAction {
+                                DispatchQueue.main.async {
+                                    last?.send(event: .Click)
+                                    last = nil
+                                }
+                            }
+                        })
+                    }
+                    
                 } else {
                     revealRightView.change(pos: NSMakePoint(frame.width - rightRevealWidth, revealRightView.frame.minY), animated: true, timingFunction: .spring)
                     revealRightView.change(size: NSMakeSize(rightRevealWidth, revealRightView.frame.height), animated: true, timingFunction: .spring)
@@ -1147,8 +1169,11 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
                         var _control:Control? = control
                         animateRightLongReveal({ completed in
                             if let control = _control {
-                                handler?(control)
-                                _control = nil
+                                DispatchQueue.main.async {
+                                    handler?(control)
+                                    _control = nil
+                                }
+                               
                             }
                         })
                     }, for: .Click)
@@ -1206,5 +1231,6 @@ class ChatListRowView: TableRowView, ViewDisplayDelegate, RevealTableView {
             revealRightView.frame = NSMakeRect(frame.width - additionalDelta, 0, rightRevealWidth, frame.height)
         }
     }
+    
     
 }

@@ -23,7 +23,7 @@ private final class AvatarTabContainer : View {
         avatar.userInteractionEnabled = false
         circle.setFrameSize(frameRect.size)
         circle.layer?.cornerRadius = frameRect.height / 2
-        circle.layer?.borderWidth = .borderSize
+        circle.layer?.borderWidth = 1.33
         circle.layer?.borderColor = theme.colors.accentIcon.cgColor
         addSubview(circle)
         addSubview(avatar)
@@ -86,7 +86,7 @@ class TabBadgeItem: TabItem {
         super.init(image: image, selectedImage: selectedImage, controller: controller, subNode:GlobalBadgeNode(context.account, sharedContext: context.sharedContext, dockTile: true, view: View()), longHoverHandler: longHoverHandler)
     }
     override func withUpdatedImages(_ image: CGImage, _ selectedImage: CGImage) -> TabItem {
-        return TabBadgeItem(context, controller: self.controller, image: image, selectedImage: selectedImage)
+        return TabBadgeItem(context, controller: self.controller, image: image, selectedImage: selectedImage, longHoverHandler: self.longHoverHandler)
     }
 }
 class TabAllBadgeItem: TabItem {
@@ -95,7 +95,7 @@ class TabAllBadgeItem: TabItem {
     private var peer: Peer?
     init(_ context: AccountContext, image: CGImage, selectedImage: CGImage, controller:ViewController, subNode:Node? = nil, longHoverHandler:((Control)->Void)? = nil) {
         self.context = context
-        super.init(image: image, selectedImage: selectedImage, controller: controller, subNode:GlobalBadgeNode(context.account, sharedContext: context.sharedContext, collectAllAccounts: true, view: View()), longHoverHandler: longHoverHandler)
+        super.init(image: image, selectedImage: selectedImage, controller: controller, subNode:GlobalBadgeNode(context.account, sharedContext: context.sharedContext, collectAllAccounts: true, view: View(), applyFilter: false), longHoverHandler: longHoverHandler)
     }
     deinit {
         disposable.dispose()

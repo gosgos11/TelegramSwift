@@ -27,7 +27,8 @@ func pullText(from message:Message, attachEmoji: Bool = true) -> NSString {
                     messageText = ((attachEmoji ? "🖼 " : "") + message.text.fixed).nsstring
                 }
             }
-            
+        case _ as TelegramMediaDice:
+            messageText = "🎲".nsstring
         case let fileMedia as TelegramMediaFile:
             if fileMedia.isStaticSticker || fileMedia.isAnimatedSticker {
                 messageText = L10n.chatListSticker(fileMedia.stickerText?.fixed ?? "").nsstring
@@ -80,7 +81,7 @@ func pullText(from message:Message, attachEmoji: Bool = true) -> NSString {
     
 }
 
-func chatListText(account:Account, for message:Message?, renderedPeer:RenderedPeer? = nil, embeddedState:PeerChatListEmbeddedInterfaceState? = nil, folder: Bool = false) -> NSAttributedString {
+func chatListText(account:Account, for message:Message?, renderedPeer:RenderedPeer? = nil, embeddedState:PeerChatListEmbeddedInterfaceState? = nil, folder: Bool = false, maxWidth: CGFloat? = nil) -> NSAttributedString {
     
     if let embeddedState = embeddedState as? ChatEmbeddedInterfaceState {
         let mutableAttributedText = NSMutableAttributedString()
@@ -138,9 +139,19 @@ func chatListText(account:Account, for message:Message?, renderedPeer:RenderedPe
             }
             
             if let author = message.author as? TelegramUser, let peer = peer, peer as? TelegramUser == nil, !peer.isChannel {
-                let peerText: NSString = (author.id == account.peerId ? "\(L10n.chatListYou)" + (folder ? ": " : "\n") : author.displayTitle + (folder ? ": " : "\n")) as NSString
+                var peerText: String = (author.id == account.peerId ? "\(L10n.chatListYou)" : author.displayTitle)
                 
-                _ = attributedText.append(string: peerText as String, color: theme.chatList.peerTextColor, font: .normal(.text))
+                let layout = TextViewLayout(.initialize(string: peerText, color: nil, font: .normal(.text)))
+                layout.measure(width: maxWidth ?? .greatestFiniteMagnitude)
+                if let line = layout.lines.first, layout.lines.count > 1 {
+                    peerText = peerText.nsstring.substring(with: line.range) + "..."
+                }
+                
+                peerText += (folder ? ": " : "\n")
+                
+                
+                    
+                _ = attributedText.append(string: peerText, color: theme.chatList.peerTextColor, font: .normal(.text))
                 _ = attributedText.append(string: messageText as String, color: theme.chatList.grayTextColor, font: .normal(.text))
             } else {
                 _ = attributedText.append(string: messageText as String, color: theme.chatList.grayTextColor, font: .normal(.text))
@@ -160,6 +171,7 @@ func chatListText(account:Account, for message:Message?, renderedPeer:RenderedPe
             _ = attributedText.append(string: text, color: theme.chatList.grayTextColor, font: .normal(.text))
             attributedText.setSelected(color: theme.colors.underSelectedColor,range: attributedText.range)
         }
+        
         return attributedText
 
     }

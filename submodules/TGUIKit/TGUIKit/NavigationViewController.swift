@@ -324,6 +324,8 @@ final class NavigationShadowView : View {
 
 open class NavigationViewController: ViewController, CALayerDelegate,CAAnimationDelegate {
 
+    public var applyAppearOnLoad: Bool = true
+    
     public private(set) var modalAction:NavigationModalAction?
     let shadowView:NavigationShadowView = NavigationShadowView(frame: NSMakeRect(0, 0, 20, 0))
     let navigationRightBorder: View = View()
@@ -467,7 +469,9 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         //containerView.autoresizingMask = [.width, .height]
         self.view.addSubview(containerView, positioned: .below, relativeTo: self.view.subviews.first)
         controller._frameRect = bounds
-        controller.viewWillAppear(false)
+        if self.applyAppearOnLoad {
+            controller.viewWillAppear(false)
+        }
         controller.navigationController = self
         
         containerView.addSubview(navigationBar)
@@ -482,10 +486,12 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         self.view.addSubview(navigationRightBorder)
         navigationRightBorder.frame = NSMakeRect(frame.width - .borderSize, 0, .borderSize, 50)
 
-        
-        Queue.mainQueue().justDispatch {
-            self.controller.viewDidAppear(false)
+        if self.applyAppearOnLoad {
+            Queue.mainQueue().justDispatch {
+                self.controller.viewDidAppear(false)
+            }
         }
+        
 
     }
     
@@ -552,6 +558,9 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
 //            return
 //        }
         
+        if controller.abolishWhenNavigationSame, controller.className == self.controller.className {
+            return
+        }
 
         controller.navigationController = self
         controller.loadViewIfNeeded(self.bounds)
@@ -581,13 +590,12 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
     
     func show(_ controller:ViewController,_ style:ViewControllerStyle) -> Void {
         lock = true
-        let previous:ViewController = self.controller;
-        self.controller = controller
-        controller.navigationController = self
+      
 
         guard let window = self.window else {return}
         
-        
+        let previous:ViewController = self.controller;
+        controller.navigationController = self
         
         if(previous === controller && stackCount > 1) {
             previous.viewWillDisappear(false)
@@ -720,10 +728,14 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
                 addShadowView(.left, updateOrigin: shadowView.superview == nil)
             }
         case .none:
+            
+            
             previous.viewWillDisappear(false);
             previous.view.removeFromSuperview()
             containerView.addSubview(controller.view)
 
+            self.controller = controller
+            
             controller.viewWillAppear(false);
             previous.viewDidDisappear(false);
             controller.viewDidAppear(false);
@@ -743,8 +755,11 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
             
             navigationRightBorder.frame = NSMakeRect(frame.width - .borderSize, 0, .borderSize, navigationBar.frame.height)
             
+            
             return // without animations
         }
+        
+        self.controller = controller
         
         let prevBackgroundView = containerView.copy() as! NSView
         let nextBackgroundView = containerView.copy() as! NSView
@@ -1146,7 +1161,7 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         }
     }
     
-    open override func scrollup() {
+    open override func scrollup(force: Bool = false) {
         super.scrollup()
         if controller.redirectUserInterfaceCalls {
             controller.scrollup()

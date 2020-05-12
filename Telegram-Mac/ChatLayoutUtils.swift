@@ -58,8 +58,9 @@ class ChatLayoutUtils: NSObject {
                     return NSMakeSize(210, 210)
                 }
                 size = contentSize.aspectFitted(NSMakeSize(210, 210))
+                size = NSMakeSize(max(size.width, 40), max(size.height, 40))
             } else if file.isInstantVideo {
-                size = NSMakeSize(200, 200)
+                size = NSMakeSize(250, 250)
             } else if file.isVideo || (file.isAnimated && !file.mimeType.lowercased().hasSuffix("gif")) {
 
                 if file.isVideo && contentSize.width > contentSize.height {
@@ -90,6 +91,8 @@ class ChatLayoutUtils: NSObject {
             if let file = media.file {
                 return contentSize(for: file, with: width)
             }
+        } else if media is TelegramMediaDice {
+            size = NSMakeSize(128, 128)
         }
         
         return size
@@ -119,6 +122,8 @@ class ChatLayoutUtils: NSObject {
             }
         } else if media is TelegramMediaMap {
             return ChatMapContentView.self
+        } else if media is TelegramMediaDice {
+            return ChatDiceContentView.self
         } else if let media = media as? TelegramMediaGame {
             if let file = media.file {
                 return contentNode(for: file)

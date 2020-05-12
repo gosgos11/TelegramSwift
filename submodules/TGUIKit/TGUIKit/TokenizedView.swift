@@ -162,47 +162,49 @@ public class TokenizedView: ScrollView, AppearanceViewProtocol, NSTextViewDelega
     public weak var delegate: TokenizedProtocol? = nil
     private let placeholder: TextView = TextView()
     
-    public func addToken(token: SearchToken, animated: Bool) -> Void {
-        tokens.append(token)
+    public func addTokens(tokens: [SearchToken], animated: Bool) -> Void {
+        self.tokens.append(contentsOf: tokens)
         
-        let view = TokenView(token, maxSize: NSMakeSize(80, 22), onDismiss: { [weak self] in
-            self?.removeToken(uniqueId: token.uniqueId, animated: true)
-        }, onSelect: { [weak self] in
-            self?.selectedIndex = self?.tokens.firstIndex(of: token)
-        })
-        
-        container.addSubview(view)
-        layoutContainer(animated: animated)
-        _tokensUpdater.set(.single(tokens))
+        for token in tokens {
+            let view = TokenView(token, maxSize: NSMakeSize(80, 22), onDismiss: { [weak self] in
+                self?.removeTokens(uniqueIds: [token.uniqueId], animated: true)
+            }, onSelect: { [weak self] in
+                self?.selectedIndex = self?.tokens.firstIndex(of: token)
+            })
+            container.addSubview(view)
+        }
+        _tokensUpdater.set(.single(self.tokens))
         input.string = ""
         textDidChange(Notification(name: NSText.didChangeNotification))
         (contentView as? TGClipView)?.scroll(to: NSMakePoint(0, container.frame.height - frame.height), animated: animated)
     }
     
-    public func removeToken(uniqueId: Int64, animated: Bool) {
-        var index:Int? = nil
-        for i in 0 ..< tokens.count {
-            if tokens[i].uniqueId == uniqueId {
-                index = i
-                break
+    public func removeTokens(uniqueIds: [Int64], animated: Bool) {
+        for uniqueId in uniqueIds {
+            var index:Int? = nil
+            for i in 0 ..< tokens.count {
+                if tokens[i].uniqueId == uniqueId {
+                    index = i
+                    break
+                }
             }
-        }
-        if let index = index {
-            tokens.remove(at: index)
-            for view in container.subviews {
-                if let view = view as? TokenView {
-                    if view.token.uniqueId == uniqueId {
-                        view.change(opacity: 0, animated: animated, completion: { [weak view] completed in
-                            if completed {
-                                view?.removeFromSuperview()
-                            }
-                        })
-                        
+            if let index = index {
+                tokens.remove(at: index)
+                for view in container.subviews {
+                    if let view = view as? TokenView {
+                        if view.token.uniqueId == uniqueId {
+                            view.change(opacity: 0, animated: animated, completion: { [weak view] completed in
+                                if completed {
+                                    view?.removeFromSuperview()
+                                }
+                            })
+                            
+                        }
                     }
                 }
             }
-            layoutContainer(animated: animated)
         }
+        layoutContainer(animated: animated)
         _tokensUpdater.set(.single(tokens))
     }
     
@@ -233,13 +235,17 @@ public class TokenizedView: ScrollView, AppearanceViewProtocol, NSTextViewDelega
                    //     token.change(size: NSMakeSize(frame.width - startPointX - between.x, token.frame.height), animated: animated)
                    // }
                     point.x = between.x
-                    point.y += token.frame.height + between.y
+                    if i != count - 1 {
+                        point.y += token.frame.height + between.y
+                    }
                 }
                 
             }
             if subview == container.subviews.last {
                 if mainw - point.x > mainw/3 {
-                    extraLine = true
+                   // if point.x != between.x {
+                        extraLine = true
+                  //  }
                 }
             }
         }
@@ -287,7 +293,7 @@ public class TokenizedView: ScrollView, AppearanceViewProtocol, NSTextViewDelega
             
             if commandSelector == #selector(deleteBackward(_:)) {
                 if let selectedIndex = selectedIndex {
-                    removeToken(uniqueId: tokens[selectedIndex].uniqueId, animated: true)
+                    removeTokens(uniqueIds: [tokens[selectedIndex].uniqueId], animated: true)
                     if selectedIndex != tokens.count {
                         self.selectedIndex = min(selectedIndex, tokens.count - 1)
                     } else {

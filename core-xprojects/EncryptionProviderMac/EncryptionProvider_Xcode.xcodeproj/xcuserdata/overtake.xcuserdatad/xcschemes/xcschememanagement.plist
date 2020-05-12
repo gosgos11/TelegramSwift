@@ -7,9 +7,9 @@
 		<key>EncryptionProvider.xcscheme</key>
 		<dict>
 			<key>isShown</key>
-			<false/>
+			<true/>
 			<key>orderHint</key>
-			<integer>26</integer>
+			<integer>22</integer>
 		</dict>
 		<key>EncryptionProviderTests.xcscheme_^#shared#^_</key>
 		<dict>

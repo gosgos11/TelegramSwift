@@ -502,61 +502,90 @@ func chatContextQueryForSearchMention(peer: Peer, _ inputQuery: ChatPresentation
 
 private let dataDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType([.link]).rawValue)
 
-func urlPreviewStateForChatInterfacePresentationState(_ chatPresentationInterfaceState: ChatPresentationInterfaceState, account: Account, currentQuery: String?) -> (String?, Signal<(TelegramMediaWebpage?) -> TelegramMediaWebpage?, NoError>)? {
+func urlPreviewStateForChatInterfacePresentationState(_ chatPresentationInterfaceState: ChatPresentationInterfaceState, context: AccountContext, currentQuery: String?) -> Signal<(String?, Signal<(TelegramMediaWebpage?) -> TelegramMediaWebpage?, NoError>)?, NoError> {
     
-    if chatPresentationInterfaceState.state == .editing, let media = chatPresentationInterfaceState.interfaceState.editState?.message.media.first {
-        if media is TelegramMediaFile || media is TelegramMediaImage {
-            return (nil, .single({ _ in return nil }))
-        }
-    }
-    
-    
-    if let peer = chatPresentationInterfaceState.peer, peer.webUrlRestricted {
-        return (nil, .single({ _ in return nil }))
-    }
-    
-    if let dataDetector = dataDetector {
+    return Signal { subscriber in
         
-        var detectedUrl: String?
+        if chatPresentationInterfaceState.state == .editing, let media = chatPresentationInterfaceState.interfaceState.editState?.message.media.first {
+            if media is TelegramMediaFile || media is TelegramMediaImage {
+                subscriber.putNext((nil, .single({ _ in return nil })))
+                subscriber.putCompletion()
+            }
+        }
+        
+        
+        if let peer = chatPresentationInterfaceState.peer, peer.webUrlRestricted {
+            subscriber.putNext((nil, .single({ _ in return nil })))
+            subscriber.putCompletion()
+        }
+        
+        if let dataDetector = dataDetector {
+            
+            var detectedUrl: String?
 
-        var detectedRange: NSRange = NSMakeRange(NSNotFound, 0)
-        let text = chatPresentationInterfaceState.effectiveInput.inputText
-        
-        let attr = chatPresentationInterfaceState.effectiveInput.attributedString
-        
-        attr.enumerateAttribute(NSAttributedString.Key(rawValue: TGCustomLinkAttributeName), in: attr.range, options: NSAttributedString.EnumerationOptions(rawValue: 0), using: { (value, range, stop) in
+            var detectedRange: NSRange = NSMakeRange(NSNotFound, 0)
+            let text = chatPresentationInterfaceState.effectiveInput.inputText.prefix(4096)
             
-            if let tag = value as? TGInputTextTag, let url = tag.attachment as? String {
-                detectedUrl = url
-                detectedRange = range
-            }
-            let s: ObjCBool = (detectedUrl != nil) ? true : false
-            stop.pointee = s
+            var attr = chatPresentationInterfaceState.effectiveInput.attributedString
+            attr = attr.attributedSubstring(from: NSMakeRange(0, min(attr.length, 4096)))
+            attr.enumerateAttribute(NSAttributedString.Key(rawValue: TGCustomLinkAttributeName), in: attr.range, options: NSAttributedString.EnumerationOptions(rawValue: 0), using: { (value, range, stop) in
+                
+                if let tag = value as? TGInputTextTag, let url = tag.attachment as? String {
+                    detectedUrl = url
+                    detectedRange = range
+                }
+                let s: ObjCBool = (detectedUrl != nil) ? true : false
+                stop.pointee = s
+                
+            })
             
-        })
-        
-        let utf16 = text.utf16
-        let matches = dataDetector.matches(in: text, options: [], range: NSRange(location: 0, length: utf16.count))
-        if let match = matches.first {
-            let urlText = (text as NSString).substring(with: match.range)
-            if match.range.location < detectedRange.location {
-                detectedUrl = urlText
+            let utf16 = text.utf16
+            let matches = dataDetector.matches(in: text, options: [], range: NSRange(location: 0, length: utf16.count))
+            if let match = matches.first {
+                let urlText = (text as NSString).substring(with: match.range)
+                if match.range.location < detectedRange.location {
+                    detectedUrl = urlText
+                }
             }
-        }
-        
-        
-        if detectedUrl != currentQuery {
-            if let detectedUrl = detectedUrl {
-                return (detectedUrl, webpagePreview(account: account, url: detectedUrl) |> map { value in
-                    return { _ in return value }
-                })
+            
+            if detectedUrl != currentQuery {
+                if let detectedUrl = detectedUrl {
+                    let link = inApp(for: detectedUrl.nsstring, context: context, peerId: nil, openInfo: { _, _, _, _ in }, hashtag: { _ in }, command: { _ in }, applyProxy: { _ in }, confirm: false)
+                    switch link {
+                    case let .external(detectedUrl, _):
+                        subscriber.putNext((detectedUrl, webpagePreview(account: context.account, url: detectedUrl) |> map { value in
+                            return { _ in return value }
+                        }))
+                    case let .followResolvedName(_, username, _, _, _, _):
+                        if username.hasPrefix("_private_") {
+                            subscriber.putNext((nil, .single({ _ in return nil })))
+                            subscriber.putCompletion()
+                        } else {
+                            subscriber.putNext((detectedUrl, webpagePreview(account: context.account, url: detectedUrl) |> map { value in
+                                return { _ in return value }
+                            }))
+                        }
+                    default:
+                        subscriber.putNext((nil, .single({ _ in return nil })))
+                        subscriber.putCompletion()
+                    }
+                } else {
+                    subscriber.putNext((nil, .single({ _ in return nil })))
+                    subscriber.putCompletion()
+                }
             } else {
-                return (nil, .single({ _ in return nil }))
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
             }
         } else {
-            return nil
+            subscriber.putNext((nil, .single({ _ in return nil })))
+            subscriber.putCompletion()
         }
-    } else {
-        return (nil, .single({ _ in return nil }))
+        
+        return ActionDisposable {
+            
+        }
     }
+    
+    
 }

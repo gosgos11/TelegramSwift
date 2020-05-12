@@ -315,6 +315,10 @@ open class ViewController : NSObject {
         return false
     }
     
+    open var isAutoclosePopover: Bool {
+        return true
+    }
+    
     open func executeReturn() -> Void {
         self.navigationController?.back()
     }
@@ -491,6 +495,10 @@ open class ViewController : NSObject {
         return BarView(controller: self)
     }
     
+    open var abolishWhenNavigationSame: Bool {
+        return false
+    }
+    
     open func viewClass() ->AnyClass {
         return View.self
     }
@@ -648,7 +656,7 @@ open class ViewController : NSObject {
         
     }
     
-    open func scrollup() {
+    open func scrollup(force: Bool = false) {
         
     }
     

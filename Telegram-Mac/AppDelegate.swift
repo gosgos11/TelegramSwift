@@ -9,7 +9,7 @@ import Quartz
 import MtProtoKit
 import CoreServices
 import LocalAuthentication
-import WalletCore
+//import WalletCore
 import OpenSSLEncryption
 import CoreSpotlight
 #if !APP_STORE
@@ -17,6 +17,13 @@ import AppCenter
 import AppCenterCrashes
 #endif
 
+#if !SHARE
+extension Account {
+    var diceCache: DiceCache? {
+        return (NSApp.delegate as? AppDelegate)?.contextValue?.context.diceCache
+    }
+}
+#endif
 
 
 private final class SharedApplicationContext {
@@ -63,7 +70,7 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
     }
 
     
-    private var contextValue: AuthorizedApplicationContext?
+    fileprivate var contextValue: AuthorizedApplicationContext?
     private let context = Promise<AuthorizedApplicationContext?>()
     
     private var authContextValue: UnauthorizedApplicationContext?
@@ -377,7 +384,7 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
                 }
             })
             
-            let networkArguments = NetworkInitializationArguments(apiId: ApiEnvironment.apiId, apiHash: ApiEnvironment.apiHash, languagesCategory: ApiEnvironment.language, appVersion: ApiEnvironment.version, voipMaxLayer: CallBridge.voipMaxLayer(), appData: .single(ApiEnvironment.appData), autolockDeadine: .single(nil), encryptionProvider: OpenSSLEncryptionProvider())
+            let networkArguments = NetworkInitializationArguments(apiId: ApiEnvironment.apiId, apiHash: ApiEnvironment.apiHash, languagesCategory: ApiEnvironment.language, appVersion: ApiEnvironment.version, voipMaxLayer: CallBridge.voipMaxLayer(), voipVersions: [CallBridge.voipVersion()], appData: .single(ApiEnvironment.appData), autolockDeadine: .single(nil), encryptionProvider: OpenSSLEncryptionProvider())
             
             let sharedContext = SharedAccountContext(accountManager: accountManager, networkArguments: networkArguments, rootPath: rootPath, encryptionParameters: encryptionParameters, displayUpgradeProgress: displayUpgrade)
             
@@ -439,31 +446,31 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
             })
             
             
-            let tonKeychain: TonKeychain
-            
-            tonKeychain = TonKeychain(encryptionPublicKey: {
-                return Signal { subscriber in
-                    return EmptyDisposable
-                }
-            }, encrypt: { data in
-                return Signal { subscriber in
-                    if #available(OSX 10.12, *) {
-                        if let context = self.contextValue?.context, let publicKey = TKPublicKey.get(for: context.account) {
-                            if let result = publicKey.encrypt(data: data) {
-                                subscriber.putNext(TonKeychainEncryptedData(publicKey: publicKey.key, data: result))
-                                subscriber.putCompletion()
-                                return EmptyDisposable
-                            }
-                        }
-                    }
-                    subscriber.putError(.generic)
-                    return EmptyDisposable
-                }
-            }, decrypt: { encryptedData in
-                return Signal { subscriber in
-                    return EmptyDisposable
-                }
-            })
+//            let tonKeychain: TonKeychain
+//            
+//            tonKeychain = TonKeychain(encryptionPublicKey: {
+//                return Signal { subscriber in
+//                    return EmptyDisposable
+//                }
+//            }, encrypt: { data in
+//                return Signal { subscriber in
+//                    if #available(OSX 10.12, *) {
+//                        if let context = self.contextValue?.context, let publicKey = TKPublicKey.get(for: context.account) {
+//                            if let result = publicKey.encrypt(data: data) {
+//                                subscriber.putNext(TonKeychainEncryptedData(publicKey: publicKey.key, data: result))
+//                                subscriber.putCompletion()
+//                                return EmptyDisposable
+//                            }
+//                        }
+//                    }
+//                    subscriber.putError(.generic)
+//                    return EmptyDisposable
+//                }
+//            }, decrypt: { encryptedData in
+//                return Signal { subscriber in
+//                    return EmptyDisposable
+//                }
+//            })
 
 
             
@@ -493,9 +500,9 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
                                         }.start()
                                     semaphore.wait()
                                 }
-                                let tonContext = StoredTonContext(basePath: account.basePath, postbox: account.postbox, network: account.network, keychain: tonKeychain)
+                              //  let tonContext = StoredTonContext(basePath: account.basePath, postbox: account.postbox, network: account.network, keychain: tonKeychain)
 
-                                let context = AccountContext(sharedContext: sharedApplicationContext.sharedContext, window: window, tonContext: tonContext, account: account)
+                                let context = AccountContext(sharedContext: sharedApplicationContext.sharedContext, window: window, account: account)
                                 return AuthorizedApplicationContext(window: window, context: context, launchSettings: settings ?? LaunchSettings.defaultSettings)
                                 
                             } else {
@@ -723,42 +730,42 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
             
             let fontSizes:[Int32] = [11, 12, 13, 14, 15, 16, 17, 18]
             
-            
-            window.set(handler: { () -> KeyHandlerResult in
-                _ = updateThemeInteractivetly(accountManager: accountManager, f: { current -> ThemePaletteSettings in
-                    if let index = fontSizes.firstIndex(of: Int32(current.fontSize)) {
-                        if index == fontSizes.count - 1 {
-                            return current
-                        } else {
-                            return current.withUpdatedFontSize(CGFloat(fontSizes[index + 1]))
-                        }
-                    } else {
-                        return current
-                    }
-                }).start()
-                if let index = fontSizes.firstIndex(of: Int32(theme.fontSize)), index == fontSizes.count - 1 {
-                    return .rejected
-                }
-                return .invoked
-            }, with: self, for: .Equal, modifierFlags: [.command])
-            
-            window.set(handler: { () -> KeyHandlerResult in
-                _ = updateThemeInteractivetly(accountManager: accountManager, f: { current -> ThemePaletteSettings in
-                    if let index = fontSizes.firstIndex(of: Int32(current.fontSize)) {
-                        if index == 0 {
-                            return current
-                        } else {
-                            return current.withUpdatedFontSize(CGFloat(fontSizes[index - 1]))
-                        }
-                    } else {
-                        return current
-                    }
-                }).start()
-                if let index = fontSizes.firstIndex(of: Int32(theme.fontSize)), index == 0 {
-                    return .rejected
-                }
-                return  .invoked
-            }, with: self, for: .Minus, modifierFlags: [.command])
+//            
+//            window.set(handler: { () -> KeyHandlerResult in
+//                _ = updateThemeInteractivetly(accountManager: accountManager, f: { current -> ThemePaletteSettings in
+//                    if let index = fontSizes.firstIndex(of: Int32(current.fontSize)) {
+//                        if index == fontSizes.count - 1 {
+//                            return current
+//                        } else {
+//                            return current.withUpdatedFontSize(CGFloat(fontSizes[index + 1]))
+//                        }
+//                    } else {
+//                        return current
+//                    }
+//                }).start()
+//                if let index = fontSizes.firstIndex(of: Int32(theme.fontSize)), index == fontSizes.count - 1 {
+//                    return .rejected
+//                }
+//                return .invoked
+//            }, with: self, for: .Equal, modifierFlags: [.command])
+//            
+//            window.set(handler: { () -> KeyHandlerResult in
+//                _ = updateThemeInteractivetly(accountManager: accountManager, f: { current -> ThemePaletteSettings in
+//                    if let index = fontSizes.firstIndex(of: Int32(current.fontSize)) {
+//                        if index == 0 {
+//                            return current
+//                        } else {
+//                            return current.withUpdatedFontSize(CGFloat(fontSizes[index - 1]))
+//                        }
+//                    } else {
+//                        return current
+//                    }
+//                }).start()
+//                if let index = fontSizes.firstIndex(of: Int32(theme.fontSize)), index == 0 {
+//                    return .rejected
+//                }
+//                return  .invoked
+//            }, with: self, for: .Minus, modifierFlags: [.command])
             
             self.window.contentView?.wantsLayer = true
         })
@@ -948,20 +955,6 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
         
         if let context = self.contextValue?.context {
             let navigation = context.sharedContext.bindings.rootNavigation()
-            
-            if let controller = navigation.controller as? InputDataController, controller.identifier == "wallet-create" {
-                let alert: NSAlert = NSAlert()
-                alert.addButton(withTitle: L10n.walletTerminateAppOK)
-                alert.addButton(withTitle: L10n.walletTerminateAppCancel)
-                alert.messageText = L10n.walletTerminateAppTitle
-                alert.informativeText = L10n.walletTerminateAppText
-                alert.alertStyle = .warning
-                if alert.runModal() == NSApplication.ModalResponse.alertFirstButtonReturn {
-                    return .terminateNow
-                } else {
-                    return .terminateLater
-                }
-            }
         }
         
         return .terminateNow
@@ -993,6 +986,11 @@ class AppDelegate: NSResponder, NSApplicationDelegate, NSUserNotificationCenterD
         }
         window.makeKeyAndOrderFront(sender)
 
+    }
+    @IBAction func globalSearch(_ sender: Any) {
+        if let context = contextValue?.context {
+            context.sharedContext.bindings.mainController().focusSearch(animated: true)
+        }
     }
     @IBAction func closeWindow(_ sender: Any) {
         NSApp.keyWindow?.close()

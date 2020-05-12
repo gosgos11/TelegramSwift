@@ -9,8 +9,6 @@ import Cocoa
 import SwiftSignalKit
 
 class PopoverBackground: Control {
-    fileprivate weak var popover:Popover?
-    
 
 }
 
@@ -122,6 +120,8 @@ open class Popover: NSObject {
     
     open func show(for control:Control, edge:NSRectEdge? = nil, inset:NSPoint = NSZeroPoint, contentRect:NSRect = NSMakeRect(7, 7, 0, 0), delayBeforeShown: Double = 0.2) -> Void {
         
+        control.popover = self
+        
         if let controller = controller, let parentView = control.window?.contentView {
             
             frameValue = PopoverFrameValue(inset: inset, edge: edge, contentRect: contentRect, control: control)
@@ -140,7 +140,7 @@ open class Popover: NSObject {
             self.readyDisposable.set(signal.start(next: { [weak self, weak controller, weak parentView] ready in
                 if let parentView = parentView {
                     for subview in parentView.subviews {
-                        if let view = subview  as? PopoverBackground, view.popover?.isShown == true {
+                        if let view = subview  as? PopoverBackground, view.popover?.isShown == true, view.popover?.controller?.isAutoclosePopover == true {
                             view.popover?.hide(false)
                         }
                     }

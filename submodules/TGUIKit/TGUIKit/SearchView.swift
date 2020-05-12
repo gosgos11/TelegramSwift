@@ -84,7 +84,7 @@ open class SearchView: OverlayControl, NSTextViewDelegate {
     
     private let animateContainer:View = View()
     
-    public let inset:CGFloat = 6
+    public let inset:CGFloat = 10
     public let leftInset:CGFloat = 10.0
     
     public var searchInteractions:SearchInteractions?
@@ -125,8 +125,8 @@ open class SearchView: OverlayControl, NSTextViewDelegate {
         clear.set(image: presentation.search.clearImage, for: .Normal)
        _ =  clear.sizeToFit()
         
-        placeholder.centerY(x: placeholderTextInset + 2, addition: -1)
-        search.centerY()
+        placeholder.centerY(x: placeholderTextInset, addition: -1)
+        search.centerY(addition: -1)
         input.insertionPointColor = presentation.search.textColor
         progressIndicator.progressColor = presentation.colors.text
         needsLayout = true
@@ -134,7 +134,7 @@ open class SearchView: OverlayControl, NSTextViewDelegate {
     }
     
     open var startTextInset: CGFloat {
-        return search.frame.width + inset
+        return search.frame.width + inset / 2
     }
     
     open var placeholderTextInset: CGFloat {
@@ -184,10 +184,10 @@ open class SearchView: OverlayControl, NSTextViewDelegate {
         
         animateContainer.addSubview(search)
         
-        self.animateContainer.setFrameSize(NSMakeSize(NSWidth(placeholder.frame) + search.frame.width + inset, max(21, search.frame.height)))
+        self.animateContainer.setFrameSize(NSMakeSize(NSWidth(placeholder.frame) + search.frame.width + inset / 2, max(21, search.frame.height)))
         
-        placeholder.centerY(nil, x: NSWidth(search.frame) + inset)
-        search.centerY()
+        placeholder.centerY(x: NSWidth(search.frame) + inset / 2, addition: -1)
+        search.centerY(addition: -1)
         
         inputContainer.addSubview(input)
         addSubview(animateContainer)
@@ -525,11 +525,11 @@ open class SearchView: OverlayControl, NSTextViewDelegate {
         case .Focus:
             animateContainer.centerY(x: leftInset)
         }
-        placeholder.centerY()
+        placeholder.centerY(addition: -1)
         clear.centerY(x: frame.width - inset - clear.frame.width)
         progressIndicator.centerY(x: frame.width - inset - progressIndicator.frame.width + 2)
         inputContainer.setFrameOrigin(placeholderTextInset + 8, inputContainer.frame.minY)
-        search.centerY()
+        search.centerY(addition: -1)
     }
 
     public func changeResponder(_ animated:Bool = true) -> Bool {

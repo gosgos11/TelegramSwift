@@ -141,8 +141,8 @@ class FastSettings {
     private static let kArchiveAutohidden = "kArchiveAutohidden"
     private static let kAutohideArchiveFeature = "kAutohideArchiveFeature"
 
+    private static let kLeftColumnWidth = "kLeftColumnWidth"
 
-    
     static var sendingType:SendingType {
         let type = UserDefaults.standard.value(forKey: kSendingType) as? String
         if let type = type {
@@ -361,6 +361,22 @@ class FastSettings {
         })
     }
     
+    static func diceHasAlreadyPlayed(_ messageId: MessageId) -> Bool {
+        return UserDefaults.standard.bool(forKey: "dice_\(messageId.id)_\(messageId.namespace)")
+    }
+    static func markDiceAsPlayed(_ messageId: MessageId) {
+        UserDefaults.standard.set(true, forKey: "dice_\(messageId.id)_\(messageId.namespace)")
+        UserDefaults.standard.synchronize()
+    }
+    
+    static func updateLeftColumnWidth(_ width: CGFloat) {
+        UserDefaults.standard.set(round(width), forKey: kLeftColumnWidth)
+        UserDefaults.standard.synchronize()
+    }
+    static var leftColumnWidth: CGFloat {
+        return round(UserDefaults.standard.value(forKey: kLeftColumnWidth) as? CGFloat ?? 300)
+    }
+    
     /*
  
      +(void)requestPermissionWithKey:(NSString *)permissionKey peer_id:(int)peer_id handler:(void (^)(bool success))handler {
@@ -444,10 +460,12 @@ func saveAs(_ file:TelegramMediaFile, account:Account) {
     })
 }
 
-func copyToDownloads(_ file: TelegramMediaFile, postbox: Postbox) -> Signal<String, NoError>  {
+func copyToDownloads(_ file: TelegramMediaFile, postbox: Postbox) -> Signal<String?, NoError>  {
     let path = downloadFilePath(file, postbox)
     return combineLatest(queue: resourcesQueue, path, downloadedFilePaths(postbox)) |> map { (expanded, paths) in
-        let (boxPath, adopted) = expanded
+        guard let (boxPath, adopted) = expanded else {
+            return nil
+        }
         if let id = file.id {
             if let path = paths.path(for: id) {
                 let lastModified = Int32(FileManager.default.modificationDateForFileAtPath(path: path.downloadedPath)?.timeIntervalSince1970 ?? 0)
@@ -505,8 +523,8 @@ func copyToDownloads(_ file: TelegramMediaFile, postbox: Postbox) -> Signal<Stri
 //
 }
 
-func downloadFilePath(_ file: TelegramMediaFile, _ postbox: Postbox) -> Signal<(String, String), NoError> {
-    return combineLatest(postbox.mediaBox.resourceData(file.resource) |> take(1), automaticDownloadSettings(postbox: postbox) |> take(1)) |> mapToSignal { data, settings -> Signal< (String, String), NoError> in
+func downloadFilePath(_ file: TelegramMediaFile, _ postbox: Postbox) -> Signal<(String, String)?, NoError> {
+    return combineLatest(postbox.mediaBox.resourceData(file.resource) |> take(1), automaticDownloadSettings(postbox: postbox) |> take(1)) |> mapToSignal { data, settings -> Signal< (String, String)?, NoError> in
         if data.complete {
             var ext:String = ""
             let fileName = file.fileName ?? data.path.nsstring.lastPathComponent
@@ -514,16 +532,39 @@ func downloadFilePath(_ file: TelegramMediaFile, _ postbox: Postbox) -> Signal<(
             if !ext.isEmpty {
                 return .single((data.path, "\(settings.downloadFolder)/\(fileName.nsstring.deletingPathExtension).\(ext)"))
             } else {
-                return resourceType(mimeType: file.mimeType) |> mapToSignal { (ext) -> Signal<(String, String), NoError> in
+                return resourceType(mimeType: file.mimeType) |> mapToSignal { (ext) -> Signal<(String, String)?, NoError> in
                     if let folder = FastSettings.downloadsFolder {
                         let ext = ext == "*" || ext == nil ? "file" : ext!
                         return .single((data.path, "\(folder)/\(fileName).\( ext )"))
                     }
-                    return .complete()
+                    return .single(nil)
                 }
             }
         } else {
-            return .complete()
+            return .single(nil)
+        }
+    }
+}
+
+func fileFinderPath(_ file: TelegramMediaFile, _ postbox: Postbox) -> Signal<String?, NoError> {
+    return combineLatest(downloadFilePath(file, postbox), downloadedFilePaths(postbox)) |> map { (expanded, paths) in
+        guard let (boxPath, adopted) = expanded else {
+            return nil
+        }
+        if let id = file.id {
+            do {
+                
+                if let path = paths.path(for: id) {
+                    let lastModified = Int32(FileManager.default.modificationDateForFileAtPath(path: path.downloadedPath)?.timeIntervalSince1970 ?? 0)
+                    if fileSize(path.downloadedPath) == Int(path.size), lastModified == path.lastModified {
+                       return path.downloadedPath
+                    }
+                }
+                
+                return adopted
+            }
+        } else {
+            return nil
         }
     }
 }
@@ -533,7 +574,9 @@ func showInFinder(_ file:TelegramMediaFile, account:Account)  {
     
     _ = combineLatest(path, downloadedFilePaths(account.postbox)).start(next: { (expanded, paths) in
         
-        let (boxPath, adopted) = expanded
+        guard let (boxPath, adopted) = expanded else {
+            return
+        }
         if let id = file.id {
             do {
                 

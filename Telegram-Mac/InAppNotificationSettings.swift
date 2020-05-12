@@ -54,7 +54,7 @@ struct InAppNotificationSettings: PreferencesEntry, Equatable {
     let showNotificationsOutOfFocus: Bool
     let badgeEnabled: Bool
     static var defaultSettings: InAppNotificationSettings {
-        return InAppNotificationSettings(enabled: true, playSounds: true, tone: "Default", displayPreviews: true, muteUntil: 0, totalUnreadCountDisplayStyle: .filtered, totalUnreadCountDisplayCategory: .chats, totalUnreadCountIncludeTags: [.regularChatsAndPrivateGroups, .channels, .publicGroups], notifyAllAccounts: true, showNotificationsOutOfFocus: true, badgeEnabled: true)
+        return InAppNotificationSettings(enabled: true, playSounds: true, tone: "Default", displayPreviews: true, muteUntil: 0, totalUnreadCountDisplayStyle: .filtered, totalUnreadCountDisplayCategory: .chats, totalUnreadCountIncludeTags: .all, notifyAllAccounts: true, showNotificationsOutOfFocus: true, badgeEnabled: true)
     }
     
     init(enabled:Bool, playSounds: Bool, tone: String, displayPreviews: Bool, muteUntil: Int32, totalUnreadCountDisplayStyle: TotalUnreadCountDisplayStyle, totalUnreadCountDisplayCategory: TotalUnreadCountDisplayCategory, totalUnreadCountIncludeTags: PeerSummaryCounterTags, notifyAllAccounts: Bool, showNotificationsOutOfFocus: Bool, badgeEnabled: Bool) {
@@ -80,11 +80,27 @@ struct InAppNotificationSettings: PreferencesEntry, Equatable {
         self.notifyAllAccounts = decoder.decodeBoolForKey("naa", orElse: true)
         self.totalUnreadCountDisplayStyle = TotalUnreadCountDisplayStyle(rawValue: decoder.decodeInt32ForKey("tds", orElse: 1)) ?? .filtered
         self.totalUnreadCountDisplayCategory = TotalUnreadCountDisplayCategory(rawValue: decoder.decodeInt32ForKey("totalUnreadCountDisplayCategory", orElse: 1)) ?? .chats
-        if let value = decoder.decodeOptionalInt32ForKey("totalUnreadCountIncludeTags") {
+        if let value = decoder.decodeOptionalInt32ForKey("totalUnreadCountIncludeTags_2") {
             self.totalUnreadCountIncludeTags = PeerSummaryCounterTags(rawValue: value)
+        } else if let value = decoder.decodeOptionalInt32ForKey("totalUnreadCountIncludeTags") {
+            var resultTags: PeerSummaryCounterTags = []
+            for legacyTag in LegacyPeerSummaryCounterTags(rawValue: value) {
+                if legacyTag == .regularChatsAndPrivateGroups {
+                    resultTags.insert(.contact)
+                    resultTags.insert(.nonContact)
+                    resultTags.insert(.bot)
+                    resultTags.insert(.group)
+                } else if legacyTag == .publicGroups {
+                    resultTags.insert(.group)
+                } else if legacyTag == .channels {
+                    resultTags.insert(.channel)
+                }
+            }
+            self.totalUnreadCountIncludeTags = resultTags
         } else {
-            self.totalUnreadCountIncludeTags = [.regularChatsAndPrivateGroups, .channels, .publicGroups]
+            self.totalUnreadCountIncludeTags = .all
         }
+
         self.showNotificationsOutOfFocus = decoder.decodeInt32ForKey("snoof", orElse: 1) != 0
         self.badgeEnabled = decoder.decodeBoolForKey("badge", orElse: true)
     }
@@ -98,7 +114,7 @@ struct InAppNotificationSettings: PreferencesEntry, Equatable {
         encoder.encodeBool(self.notifyAllAccounts, forKey: "naa")
         encoder.encodeInt32(self.totalUnreadCountDisplayStyle.rawValue, forKey: "tds")
         encoder.encodeInt32(self.totalUnreadCountDisplayCategory.rawValue, forKey: "totalUnreadCountDisplayCategory")
-        encoder.encodeInt32(self.totalUnreadCountIncludeTags.rawValue, forKey: "totalUnreadCountIncludeTags")
+        encoder.encodeInt32(self.totalUnreadCountIncludeTags.rawValue, forKey: "totalUnreadCountIncludeTags_2")
         encoder.encodeInt32(self.showNotificationsOutOfFocus ? 1 : 0, forKey: "snoof")
         encoder.encodeBool(self.badgeEnabled, forKey: "badge")
     }

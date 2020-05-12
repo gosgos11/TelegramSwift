@@ -10,6 +10,17 @@ import Cocoa
 import SwiftSignalKit
 
 
+public struct SPopoverAdditionItemView {
+    let context: Any?
+    let view: NSView
+    let updateIsSelected:((Bool)->Void)?
+    public init(context: Any?, view: NSView, updateIsSelected:((Bool)->Void)? = nil) {
+        self.context = context
+        self.view = view
+        self.updateIsSelected = updateIsSelected
+    }
+}
+
 public struct SPopoverItem : Equatable {
     let title:String
     let image:CGImage?
@@ -17,22 +28,29 @@ public struct SPopoverItem : Equatable {
     let height: CGFloat
     let handler:()->Void
     let isSeparator: Bool
-    public init(_ title:String, _ handler:@escaping ()->Void, _ image:CGImage? = nil, _ textColor: NSColor = presentation.colors.text, height: CGFloat = 40.0, isSeparator: Bool = false) {
+    let drawSeparatorBorder: Bool
+    let additionView: SPopoverAdditionItemView?
+    
+    public init(_ title:String, _ handler:@escaping ()->Void, _ image:CGImage? = nil, _ textColor: NSColor = presentation.colors.text, height: CGFloat = 40.0, isSeparator: Bool = false, drawSeparatorBorder: Bool = true, additionView: SPopoverAdditionItemView? = nil) {
         self.title = title
         self.image = image
         self.textColor = textColor
         self.handler = handler
         self.height = height
         self.isSeparator = false
+        self.additionView = additionView
+        self.drawSeparatorBorder = drawSeparatorBorder
     }
     
-    public init() {
+    public init(_ drawSeparatorBorder: Bool = true) {
         self.title = ""
         self.image = nil
         self.textColor = presentation.colors.text
         self.handler = {}
         self.height = 10
         self.isSeparator = true
+        self.drawSeparatorBorder = drawSeparatorBorder
+        self.additionView = nil
     }
     
     public static func ==(lhs: SPopoverItem, rhs: SPopoverItem) -> Bool {
@@ -60,9 +78,9 @@ public class SPopoverViewController: GenericViewController<TableView> {
         let alignAsImage = !items.filter({$0.image != nil}).isEmpty
         let items = items.map { item -> TableRowItem in
             if item.isSeparator {
-                return SPopoverSeparatorItem()
+                return SPopoverSeparatorItem(item.drawSeparatorBorder)
             } else {
-                return SPopoverRowItem(NSZeroSize, height: item.height, image: item.image, alignAsImage: alignAsImage, title: item.title, textColor: item.textColor, clickHandler: {
+                return SPopoverRowItem(NSZeroSize, height: item.height, image: item.image, alignAsImage: alignAsImage, title: item.title, textColor: item.textColor, additionView: item.additionView, clickHandler: {
                     Queue.mainQueue().justDispatch {
                         controller?.popover?.hide()
                         
@@ -79,7 +97,7 @@ public class SPopoverViewController: GenericViewController<TableView> {
         }
         
         
-        let width: CGFloat = items.isEmpty ? 200 : items.compactMap({ $0 as? SPopoverRowItem }).max(by: {$0.title.layoutSize.width < $1.title.layoutSize.width})!.title.layoutSize.width
+        let width: CGFloat = items.isEmpty ? 200 : items.compactMap({ $0 as? SPopoverRowItem }).max(by: {$0.itemWidth < $1.itemWidth})!.itemWidth
         
         for item in headerItems {
             _ = item.makeSize(width + 48 + 18)
@@ -87,7 +105,7 @@ public class SPopoverViewController: GenericViewController<TableView> {
         
         
         
-        self.items = headerItems + (headerItems.isEmpty ? [] : [SPopoverSeparatorItem(NSZeroSize)]) + items
+        self.items = headerItems + (headerItems.isEmpty ? [] : [SPopoverSeparatorItem(false)]) + items
         
         var height: CGFloat = 0
         for (i, item) in self.items.enumerated() {

@@ -15,7 +15,7 @@ public struct System {
     
     public static var isRetina:Bool {
         get {
-            return scaleFactor.modify({$0}) == 2.0
+            return scaleFactor.modify({$0}) >= 2.0
         }
     }
     
@@ -36,10 +36,10 @@ public struct System {
     }
     
     public static var supportsTransparentFontDrawing: Bool {
-        if #available(OSX 10.14, *) {
+        if #available(OSX 10.15, *) {
             return true
         } else {
-            return false
+            return System.backingScale > 1.0
         }
     }
  

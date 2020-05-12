@@ -124,7 +124,6 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
     private let chatUndoManagerDisposable = MetaDisposable()
     private let appUpdateDisposable = MetaDisposable()
     private let updatesDisposable = MetaDisposable()
-    
     private let _ready:Promise<Bool> = Promise()
     var ready: Signal<Bool, NoError> {
         return _ready.get() |> filter { $0 } |> take (1)
@@ -316,7 +315,7 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
         window.set(handler: { [weak self] () -> KeyHandlerResult in
             self?.openChat(2)
             return .invoked
-            }, with: self, for: .Three, priority: .low, modifierFlags: [.command])
+        }, with: self, for: .Three, priority: .low, modifierFlags: [.command])
         
         window.set(handler: { [weak self] () -> KeyHandlerResult in
             self?.openChat(3)
@@ -349,15 +348,70 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
         }, with: self, for: .Nine, priority: .low, modifierFlags: [.command])
         
         
+        
+        
         window.set(handler: { [weak self] () -> KeyHandlerResult in
-            self?.leftController.focusSearch(animated: true)
+            self?.openChat(0, true)
             return .invoked
-        }, with: self, for: .F, priority: .supreme, modifierFlags: [.command, .option])
+        }, with: self, for: .One, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(1, true)
+            return .invoked
+        }, with: self, for: .Two, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(2, true)
+            return .invoked
+        }, with: self, for: .Three, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(3, true)
+            return .invoked
+        }, with: self, for: .Four, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(4, true)
+            return .invoked
+        }, with: self, for: .Five, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(5, true)
+            return .invoked
+        }, with: self, for: .Six, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(6, true)
+            return .invoked
+        }, with: self, for: .Seven, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(7, true)
+            return .invoked
+        }, with: self, for: .Eight, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(8, true)
+            return .invoked
+        }, with: self, for: .Nine, priority: .low, modifierFlags: [.command, .option])
+        
+        window.set(handler: { [weak self] () -> KeyHandlerResult in
+            self?.openChat(9, true)
+            return .invoked
+        }, with: self, for: .Minus, priority: .low, modifierFlags: [.command, .option])
+        
+    
+        
+//        window.set(handler: { [weak self] () -> KeyHandlerResult in
+//            self?.leftController.focusSearch(animated: true)
+//            return .invoked
+//        }, with: self, for: .F, priority: .supreme, modifierFlags: [.command, .shift])
+        
+        
         
         #if DEBUG
-        window.set(handler: { [weak self] () -> KeyHandlerResult in
-            PlayConfetti(for: window)
-            playSoundEffect(.confetti)
+        window.set(handler: { () -> KeyHandlerResult in
+            context.sharedContext.bindings.rootNavigation().push(GlobalSearchModalController(context: context))
             return .invoked
         }, with: self, for: .T, priority: .supreme, modifierFlags: .command)
         #endif
@@ -476,9 +530,7 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
                 }
             })
         }
-        
-        
-        
+            
        // _ready.set(.single(true))
     }
     
@@ -502,20 +554,37 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
         }
     }
     
-    private func openChat(_ index: Int) {
-        leftController.openChat(index)
+    private func openChat(_ index: Int, _ force: Bool = false) {
+        leftController.openChat(index, force: force)
     }
     
-  
+    func splitResizeCursor(at point: NSPoint) -> NSCursor? {
+        if FastSettings.isMinimisize {
+            return NSCursor.resizeRight
+        } else {
+            if window.frame.width - point.x <= 380 {
+                return NSCursor.resizeLeft
+            }
+            return NSCursor.resizeLeftRight
+        }
+    }
 
-
+    func splitViewShouldResize(at point: NSPoint) {
+        if !FastSettings.isMinimisize {
+            let max_w = window.frame.width - 380
+            let result = round(min(max(point.x, 300), max_w))
+            FastSettings.updateLeftColumnWidth(result)
+            splitView.updateStartSize(size: NSMakeSize(result, result), controller: leftController)
+        }
+        
+    }
     
 
     
     func splitViewDidNeedSwapToLayout(state: SplitViewState) {
         let previousState = splitView.state
         splitView.removeAllControllers();
-        let w:CGFloat = 300;
+        let w:CGFloat = FastSettings.leftColumnWidth;
         FastSettings.isMinimisize = false
         splitView.mustMinimisize = false
         switch state {

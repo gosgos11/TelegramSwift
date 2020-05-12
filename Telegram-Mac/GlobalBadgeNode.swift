@@ -48,6 +48,7 @@ class GlobalBadgeNode: Node {
                             strongSelf.frame = NSMakeRect(origin.x,origin.y,strongSelf.size.width,strongSelf.size.height)
                         } else {
                             strongSelf.view?.setFrameSize(strongSelf.size)
+                            strongSelf.layoutChanged?()
                         }
                     }
                 }
@@ -81,7 +82,7 @@ class GlobalBadgeNode: Node {
     
     private let getColor: (Bool) -> NSColor
     
-    init(_ account: Account, sharedContext: SharedAccountContext, dockTile: Bool = false, collectAllAccounts: Bool = false, excludePeerId:PeerId? = nil, excludeGroupId: PeerGroupId? = nil, view: View? = nil, layoutChanged:(()->Void)? = nil, getColor: @escaping(Bool) -> NSColor = { _ in return theme.colors.redUI }) {
+    init(_ account: Account, sharedContext: SharedAccountContext, dockTile: Bool = false, collectAllAccounts: Bool = false, excludePeerId:PeerId? = nil, excludeGroupId: PeerGroupId? = nil, view: View? = nil, layoutChanged:(()->Void)? = nil, getColor: @escaping(Bool) -> NSColor = { _ in return theme.colors.redUI }, fontSize: CGFloat = .small, applyFilter: Bool = true, filter: ChatListFilter? = nil) {
         self.account = account
         self.excludePeerId = excludePeerId
         self.layoutChanged = layoutChanged
@@ -89,14 +90,23 @@ class GlobalBadgeNode: Node {
         self.getColor = getColor
         super.init(view)
         
+        struct Result : Equatable {
+            let dockText: String?
+            let total:Int32
+        }
+        
         var items:[UnreadMessageCountsItem] = []
         let peerSignal: Signal<(Peer, Bool)?, NoError>
+        
+        
+        
+        
         if let peerId = excludePeerId {
             items.append(.peer(peerId))
             let notificationKeyView: PostboxViewKey = .peerNotificationSettings(peerIds: Set([peerId]))
             peerSignal = combineLatest(account.postbox.loadedPeerWithId(peerId), account.postbox.combinedView(keys: [notificationKeyView]) |> map { view in
-                return ((view.views[notificationKeyView] as? PeerNotificationSettingsView)?.notificationSettings[peerId])?.isRemovedFromTotalUnreadCount ?? false
-            }) |> map {Optional($0)}
+                return ((view.views[notificationKeyView] as? PeerNotificationSettingsView)?.notificationSettings[peerId])?.isRemovedFromTotalUnreadCount(default: false) ?? false
+                }) |> map {Optional($0)}
         } else {
             peerSignal = .single(nil)
         }
@@ -110,52 +120,76 @@ class GlobalBadgeNode: Node {
             signal = renderedTotalUnreadCount(accountManager: sharedContext.accountManager, postbox: account.postbox) |> map { [$0] }
         }
         
-        self.disposable.set((combineLatest(signal, account.postbox.unreadMessageCountsView(items: items), appNotificationSettings(accountManager: sharedContext.accountManager), peerSignal) |> deliverOnMainQueue).start(next: { [weak self] (counts, view, inAppSettings, peerSettings) in
-            if let strongSelf = self {
-                
-                var excludeTotal: Int32 = 0
-                
-                var dockText: String?
-                let totalValue = !inAppSettings.badgeEnabled  ? 0 : (collectAllAccounts && !inAppSettings.notifyAllAccounts ? 0 : max(0, counts.reduce(0, { $0 + $1.0 })))
-                if totalValue > 0 {
-                     dockText = "\(totalValue)"
+        var unreadCountItems: [UnreadMessageCountsItem] = []
+        unreadCountItems.append(.total(nil))
+        var keys: [PostboxViewKey] = []
+        let unreadKey: PostboxViewKey
+        unreadKey = .unreadCounts(items: [])
+        
+        let s:Signal<Result, NoError>
+        
+        if let filter = filter {
+            s = chatListFilterItems(account: account, accountManager: sharedContext.accountManager) |> map { value in
+                if let unread = value.count(for: filter) {
+                    return Result(dockText: nil, total: Int32(unread.count))
+                } else {
+                    return Result(dockText: nil, total: 0)
                 }
+            } |> deliverOnMainQueue
+        } else {
+            s = combineLatest(signal, account.postbox.unreadMessageCountsView(items: items), account.postbox.combinedView(keys: keys), appNotificationSettings(accountManager: sharedContext.accountManager), peerSignal) |> map { (counts, view, keysView, inAppSettings, peerSettings) in
                 
-                excludeTotal = totalValue
- 
-                
-                if items.count == 1, let peerSettings = peerSettings {
-                    if let count = view.count(for: items[0]), inAppSettings.totalUnreadCountIncludeTags.contains(peerSettings.0.peerSummaryTags), count > 0 {
-                        var removable = false
-                        switch inAppSettings.totalUnreadCountDisplayStyle {
-                        case .raw:
-                            removable = true
-                        case .filtered:
-                            if !peerSettings.1 {
+                if !applyFilter || filter == nil {
+                    var excludeTotal: Int32 = 0
+                    
+                    var dockText: String?
+                    let totalValue = !inAppSettings.badgeEnabled  ? 0 : (collectAllAccounts && !inAppSettings.notifyAllAccounts ? 0 : max(0, counts.reduce(0, { $0 + $1.0 })))
+                    if totalValue > 0 {
+                        dockText = "\(totalValue)"
+                    }
+                    
+                    excludeTotal = totalValue
+                    
+                    if items.count == 1, let peerSettings = peerSettings {
+                        if let count = view.count(for: items[0]), count > 0 {
+                            var removable = false
+                            switch inAppSettings.totalUnreadCountDisplayStyle {
+                            case .raw:
                                 removable = true
+                            case .filtered:
+                                if !peerSettings.1 {
+                                    removable = true
+                                }
                             }
-                        }
-                        if removable {
-                            switch inAppSettings.totalUnreadCountDisplayCategory {
-                            case .chats:
-                                excludeTotal -= 1
-                            case .messages:
-                                excludeTotal -= count
+                            if removable {
+                                switch inAppSettings.totalUnreadCountDisplayCategory {
+                                case .chats:
+                                    excludeTotal -= 1
+                                case .messages:
+                                    excludeTotal -= count
+                                }
                             }
                         }
                     }
+                    return Result(dockText: dockText, total: excludeTotal)
                 }
+                return Result(dockText: nil, total: 0)
+            } |> deliverOnMainQueue
+        }
+        
+        
+        self.disposable.set(s.start(next: { [weak self] result in
+            if let strongSelf = self {
                 
-                
-                
-                if excludeTotal == 0 {
+                if result.total == 0 {
                     strongSelf.attributedString = nil
                 } else {
-                    strongSelf.attributedString = .initialize(string: Int(excludeTotal).prettyNumber, color: getColor(strongSelf.isSelected) != theme.colors.redUI ?  theme.colors.underSelectedColor : .white, font: .bold(.small))
+                    strongSelf.attributedString = .initialize(string: Int(result.total).prettyNumber, color: getColor(strongSelf.isSelected) != theme.colors.redUI ?  theme.colors.underSelectedColor : .white, font: .bold(fontSize))
                 }
                 strongSelf.layoutChanged?()
+                
                 if dockTile {
-                    NSApplication.shared.dockTile.badgeLabel = dockText
+                    NSApplication.shared.dockTile.badgeLabel = result.dockText
                     forceUpdateStatusBarIconByDockTile(sharedContext: sharedContext)
                 }
             }

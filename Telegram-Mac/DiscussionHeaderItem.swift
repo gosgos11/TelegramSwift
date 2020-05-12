@@ -43,7 +43,7 @@ private final class DiscussionHeaderView : TableRowView {
     }
     
     override var backdorColor: NSColor {
-        return theme.colors.grayBackground
+        return theme.colors.listBackground
     }
     
     override func updateColors() {

@@ -305,9 +305,11 @@ extension Media {
         if self is TelegramMediaImage {
             return true
         } else if let file = self as? TelegramMediaFile {
-            return file.isVideo || (file.isAnimated && !file.mimeType.lowercased().hasSuffix("gif")) || file.isAnimatedSticker
+            return file.isVideo || (file.isAnimated && !file.mimeType.lowercased().hasSuffix("gif"))
         } else if let map = self as? TelegramMediaMap {
             return map.venue == nil
+        } else if self is TelegramMediaDice {
+            return false
         }
         return false
     }
@@ -479,6 +481,15 @@ public extension Message {
         return isCrosspostFromChannel
     }
     
+    var channelViewsCount: Int32? {
+        for attribute in self.attributes {
+            if let attribute = attribute as? ViewCountMessageAttribute {
+                return Int32(attribute.count)
+            }
+        }
+        return nil
+    }
+    
     var isScheduledMessage: Bool {
         return self.id.namespace == Namespaces.Message.ScheduledCloud || self.id.namespace == Namespaces.Message.ScheduledLocal
     }
@@ -594,7 +605,7 @@ public extension Message {
         return Message(stableId: stableId, stableVersion: stableVersion, id: id, globallyUniqueId: globallyUniqueId, groupingKey: groupingKey, groupInfo: groupInfo, timestamp: timestamp, flags: flags, tags: tags, globalTags: globalTags, localTags: localTags, forwardInfo: forwardInfo, author: author, text: text, attributes: attributes, media: media, peers: peers, associatedMessages: associatedMessages, associatedMessageIds: associatedMessageIds)
     }
     
-    public func withUpdatedTimestamp(_ timestamp: Int32) -> Message {
+    func withUpdatedTimestamp(_ timestamp: Int32) -> Message {
         return Message(stableId: self.stableId, stableVersion: self.stableVersion, id: self.id, globallyUniqueId: self.globallyUniqueId, groupingKey: self.groupingKey, groupInfo: self.groupInfo, timestamp: timestamp, flags: self.flags, tags: self.tags, globalTags: self.globalTags, localTags: self.localTags, forwardInfo: self.forwardInfo, author: self.author, text: self.text, attributes: self.attributes, media: self.media, peers: self.peers, associatedMessages: self.associatedMessages, associatedMessageIds: self.associatedMessageIds)
     }
     
@@ -750,6 +761,23 @@ func canForwardMessage(_ message:Message, account:Account) -> Bool {
     return true
 }
 
+public struct ChatAvailableMessageActionOptions: OptionSet {
+    public var rawValue: Int32
+    
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+    
+    public init() {
+        self.rawValue = 0
+    }
+    
+    public static let deleteLocally = ChatAvailableMessageActionOptions(rawValue: 1 << 0)
+    public static let deleteGlobally = ChatAvailableMessageActionOptions(rawValue: 1 << 1)
+    public static let unsendPersonal = ChatAvailableMessageActionOptions(rawValue: 1 << 7)
+}
+
+
 
 func canDeleteForEveryoneMessage(_ message:Message, context: AccountContext) -> Bool {
     if message.peers[message.id.peerId] is TelegramChannel || message.peers[message.id.peerId] is TelegramSecretChat {
@@ -758,19 +786,31 @@ func canDeleteForEveryoneMessage(_ message:Message, context: AccountContext) -> 
         if context.limitConfiguration.canRemoveIncomingMessagesInPrivateChats && message.peers[message.id.peerId] is TelegramUser {
             return true
         }
-        if Int(context.limitConfiguration.maxMessageEditingInterval) + Int(message.timestamp) > Int(Date().timeIntervalSince1970) {
-            if context.account.peerId != messageMainPeer(message)?.id {
-                return !(message.media.first is TelegramMediaAction)
-            }
-        } else if let peer = message.peers[message.id.peerId] as? TelegramGroup {
+        if let peer = message.peers[message.id.peerId] as? TelegramGroup {
             switch peer.role {
             case .creator, .admin:
                 return true
             default:
+                if Int(context.limitConfiguration.maxMessageEditingInterval) + Int(message.timestamp) > Int(Date().timeIntervalSince1970) {
+                    if context.account.peerId == message.effectiveAuthor?.id {
+                        return !(message.media.first is TelegramMediaAction)
+                    }
+                }
                 return false
             }
             
+        } else if Int(context.limitConfiguration.maxMessageEditingInterval) + Int(message.timestamp) > Int(Date().timeIntervalSince1970) {
+            if context.account.peerId == message.author?.id {
+                return !(message.media.first is TelegramMediaAction)
+            }
         }
+    }
+    return false
+}
+
+func mustDeleteForEveryoneMessage(_ message:Message) -> Bool {
+    if message.peers[message.id.peerId] is TelegramChannel || message.peers[message.id.peerId] is TelegramSecretChat {
+        return true
     }
     return false
 }
@@ -822,6 +862,9 @@ func canEditMessage(_ message:Message, context: AccountContext) -> Bool {
             return false
         }
         if media is TelegramMediaPoll {
+            return false
+        }
+        if media is TelegramMediaDice {
             return false
         }
     }
@@ -2592,8 +2635,45 @@ func requestAudioPermission() -> Signal<Bool, NoError> {
     }
 }
 
+
+func requestMediaPermission(_ type: AVFoundation.AVMediaType) -> Signal<Bool, NoError> {
+    if #available(OSX 10.14, *) {
+        return Signal { subscriber in
+            let status = AVCaptureDevice.authorizationStatus(for: type)
+            var cancelled: Bool = false
+            switch status {
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: type, completionHandler: { completed in
+                    if !cancelled {
+                        subscriber.putNext(completed)
+                        subscriber.putCompletion()
+                    }
+                })
+            case .authorized:
+                subscriber.putNext(true)
+                subscriber.putCompletion()
+            case .denied:
+                subscriber.putNext(false)
+                subscriber.putCompletion()
+            case .restricted:
+                subscriber.putNext(false)
+                subscriber.putCompletion()
+            @unknown default:
+                subscriber.putNext(false)
+                subscriber.putCompletion()
+            }
+            return ActionDisposable {
+                cancelled = true
+            }
+        }
+    } else {
+        return .single(true)
+    }
+}
+
 enum SystemSettingsCategory : String {
     case microphone = "Privacy_Microphone"
+    case none = ""
 }
 
 func openSystemSettings(_ category: SystemSettingsCategory) {

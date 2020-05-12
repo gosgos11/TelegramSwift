@@ -36,10 +36,14 @@ public class TabBarView: View {
         super.draw(layer, in: ctx)
         
         ctx.setFillColor(presentation.colors.border.cgColor)
-        ctx.fill(self.bounds)
+        ctx.fill(NSMakeRect(frame.width - .borderSize, 0, .borderSize, frame.height))
+        ctx.fill(NSMakeRect(0, 0, frame.width, .borderSize))
+
     }
     
-    
+    func control(for index: Int) -> Control {
+        return subviews[index] as! Control
+    }
     
     func addTab(_ tab: TabItem) {
         self.tabs.append(tab)
@@ -48,7 +52,21 @@ public class TabBarView: View {
     func replaceTab(_ tab: TabItem, at index:Int) {
         self.tabs.remove(at: index)
         self.tabs.insert(tab, at: index)
-        self.redraw()
+        
+        let subview = self.subviews[index].subviews.first?.subviews.first as? ImageView
+        subview?.animates = true
+        subview?.image = self.selectedIndex == index ? tab.selectedImage : tab.image
+        subview?.animates = false
+        (self.subviews[index] as? Control)?.backgroundColor = presentation.colors.background
+        (self.subviews[index].subviews.first as? View)?.backgroundColor = presentation.colors.background
+
+        if let subView = tab.subNode?.view {
+            while self.subviews[index].subviews.count > 1 {
+                self.subviews[index].subviews.last?.removeFromSuperview()
+            }
+            self.subviews[index].addSubview(subView)
+            tab.subNode?.update()
+        }
     }
     
     func insertTab(_ tab: TabItem, at index: Int) {
@@ -88,6 +106,9 @@ public class TabBarView: View {
     public func tab(at index:Int) -> TabItem {
         return self.tabs[index]
     }
+    public func showTooltip(text: String, for index: Int) -> Void {
+        tooltip(for: self.subviews[index], text: text)
+    }
     
     func redraw() {
         let width = NSWidth(self.bounds)
@@ -103,8 +124,8 @@ public class TabBarView: View {
             let view = Control(frame: NSMakeRect(xOffset, .borderSize, itemWidth, height))
             view.backgroundColor = presentation.colors.background
             let container = View(frame: view.bounds)
-            view.set(handler: { [weak tab] control in
-                tab?.longHoverHandler?(control)
+            view.set(handler: { [weak self] control in
+                self?.tabs[i].longHoverHandler?(control)
             }, for: .RightDown)
             
             view.set(handler: { [weak self] control in

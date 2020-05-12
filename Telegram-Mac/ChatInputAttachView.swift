@@ -133,6 +133,11 @@ class ChatInputAttachView: ImageButton, Notifable {
         
         set(handler: { [weak self] control in
             guard let `self` = self else {return}
+            
+            if let editState = chatInteraction.presentation.interfaceState.editState {
+                return
+            }
+            
             if let peer = self.chatInteraction.presentation.peer {
                 if let permissionText = permissionText(from: peer, for: .banSendMedia) {
                     alert(for: mainWindow, info: permissionText)
@@ -142,8 +147,9 @@ class ChatInputAttachView: ImageButton, Notifable {
                 Queue.mainQueue().justDispatch {
                     if self.chatInteraction.presentation.interfaceState.editState != nil {
                         self.chatInteraction.updateEditingMessageMedia(nil, true)
+                    } else {
+                        self.chatInteraction.attachFile(true)
                     }
-                    self.chatInteraction.attachFile(true)
                 }
             }
         }, for: .Click)

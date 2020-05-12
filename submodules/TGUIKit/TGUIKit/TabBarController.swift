@@ -102,8 +102,12 @@ public class TabBarController: ViewController, TabViewDelegate {
         }
     }
     
-    public override func scrollup() {
+    public func scrollup() {
         current?.scrollup()
+    }
+    
+    public func control(for index: Int) -> Control {
+        return self.genericView.tabView.control(for: index)
     }
     
     public func hideTabView(_ hide:Bool) {
@@ -139,6 +143,9 @@ public class TabBarController: ViewController, TabViewDelegate {
     }
     public var isEmpty:Bool {
         return genericView.tabView.isEmpty
+    }
+    public func showTooltip(text: String, for index: Int) -> Void {
+        genericView.tabView.showTooltip(text: text, for: index)
     }
     
 }

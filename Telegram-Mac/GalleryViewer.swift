@@ -239,7 +239,7 @@ class GalleryViewer: NSResponder {
             self.window.level = .popUpMenu
             self.window.isOpaque = false
             self.window.backgroundColor = .clear
-            self.window.appearance = theme.appearance
+          //  self.window.appearance = theme.appearance
             backgroundView.wantsLayer = true
             backgroundView.background = NSColor.black.withAlphaComponent(0.9)
             backgroundView.frame = bounds
@@ -896,17 +896,30 @@ class GalleryViewer: NSResponder {
                 
                 var canDelete:Bool = true
                 var canDeleteForEveryone = true
-                
                 var otherCounter:Int32 = 0
+                let peerId = peer.id
+                var _mustDeleteForEveryoneMessage: Bool = true
                 for message in messages {
                     if !canDeleteMessage(message, account: self.context.account) {
                         canDelete = false
                     }
+                    if !mustDeleteForEveryoneMessage(message) {
+                        _mustDeleteForEveryoneMessage = false
+                    }
                     if !canDeleteForEveryoneMessage(message, context: self.context) {
                         canDeleteForEveryone = false
                     } else {
-                        if message.author?.id != self.context.peerId {
-                            otherCounter += 1
+                        if message.effectiveAuthor?.id != self.context.peerId && !(self.context.limitConfiguration.canRemoveIncomingMessagesInPrivateChats && message.peers[message.id.peerId] is TelegramUser)  {
+                            if let peer = message.peers[message.id.peerId] as? TelegramGroup {
+                                inner: switch peer.role {
+                                case .member:
+                                    otherCounter += 1
+                                default:
+                                    break inner
+                                }
+                            } else {
+                                otherCounter += 1
+                            }
                         }
                     }
                 }
@@ -916,10 +929,10 @@ class GalleryViewer: NSResponder {
                 }
                 
                 if canDelete {
-                    let thrid:String? = canDeleteForEveryone ? peer.isUser ? L10n.chatMessageDeleteForMeAndPerson(peer.compactDisplayTitle) : L10n.chatConfirmDeleteMessagesForEveryone : nil
+                    let thrid:String? = (canDeleteForEveryone ? peer.isUser ? L10n.chatMessageDeleteForMeAndPerson(peer.compactDisplayTitle) : L10n.chatConfirmDeleteMessagesForEveryone : nil)
                     
                     if let thrid = thrid {
-                        modernConfirm(for: self.window, account: self.context.account, peerId: nil, header: L10n.chatConfirmDeleteMessages, information: nil, okTitle: L10n.confirmDelete, thridTitle: thrid, successHandler: { [weak self] result in
+                        modernConfirm(for: self.window, account: self.context.account, peerId: nil, header: L10n.chatConfirmDeleteMessagesCountable(messages.count), information: nil, okTitle: L10n.confirmDelete, thridTitle: thrid, successHandler: { [weak self] result in
                             guard let `self` = self else {return}
                             
                             let type:InteractiveMessagesDeletionType
@@ -1039,11 +1052,11 @@ class GalleryViewer: NSResponder {
                                    
                                     let text: String
                                     if item is MGalleryVideoItem {
-                                         text = L10n.galleryViewFastSaveVideo
+                                         text = L10n.galleryViewFastSaveVideo1
                                     } else if item is MGalleryGIFItem {
-                                        text = L10n.galleryViewFastSaveGif
+                                        text = L10n.galleryViewFastSaveGif1
                                     } else {
-                                        text = L10n.galleryViewFastSaveImage
+                                        text = L10n.galleryViewFastSaveImage1
                                     }
                                     
                                     let dateFormatter = DateFormatter()
@@ -1064,21 +1077,22 @@ class GalleryViewer: NSResponder {
                                     }
                                     
                                     let context = strongSelf.context
-                                    let attributedText = parseMarkdownIntoAttributedString(text, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .bold(18), textColor: .white), bold: MarkdownAttributeSet(font: .bold(18), textColor: .white), link: MarkdownAttributeSet(font: .bold(18), textColor: theme.colors.link), linkAttribute: { contents in
+                                    let attributedText = parseMarkdownIntoAttributedString(text, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .bold(15), textColor: .white), bold: MarkdownAttributeSet(font: .bold(15), textColor: .white), link: MarkdownAttributeSet(font: .bold(15), textColor: .link), linkAttribute: { contents in
                                         return (NSAttributedString.Key.link.rawValue, inAppLink.callback(contents, { _ in }))
                                     })).mutableCopy() as! NSMutableAttributedString
                                     
-                                    let layout = TextViewLayout(attributedText, alwaysStaticItems: true)
-                                    layout.interactions = TextViewInteractions.init(processURL: { [weak strongSelf] url  in
+                                    let layout = TextViewLayout(attributedText, alignment: .center, lineSpacing: 5.0, alwaysStaticItems: true)
+                                    layout.interactions = TextViewInteractions(processURL: { [weak strongSelf] url  in
                                          if let file = file {
                                             showInFinder(file, account: context.account)
                                             strongSelf?.close(false)
                                         }
                                     })
-                                    layout.measure(width: strongSelf.window.frame.width - 100)
+                                    layout.measure(width: 160)
                                     
                                     if let file = file {
-                                        _ = (copyToDownloads(file, postbox: context.account.postbox) |> map { _ in } |> deliverOnMainQueue |> take(1) |> then (showModalSuccess(for: strongSelf.window, icon: theme.icons.successModalProgress, text: layout, background: .blackTransparent, delay: 2.0))).start()
+                                        
+                                        _ = (copyToDownloads(file, postbox: context.account.postbox) |> map { _ in } |> deliverOnMainQueue |> take(1) |> then (showSaveModal(for: strongSelf.window, context: context, animation: LocalAnimatedSticker.success_saved, text: layout, delay: 3.0))).start()
                                     } else {
                                         savePanel(file: path.nsstring.deletingPathExtension, ext: path.nsstring.pathExtension, for: strongSelf.window)
                                     }

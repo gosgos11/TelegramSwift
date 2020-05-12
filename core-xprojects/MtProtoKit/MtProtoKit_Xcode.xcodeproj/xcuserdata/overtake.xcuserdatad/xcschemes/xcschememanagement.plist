@@ -7,9 +7,9 @@
 		<key>MtProtoKit.xcscheme</key>
 		<dict>
 			<key>isShown</key>
-			<false/>
+			<true/>
 			<key>orderHint</key>
-			<integer>16</integer>
+			<integer>12</integer>
 		</dict>
 		<key>MtProtoKitDynamic.xcscheme_^#shared#^_</key>
 		<dict>

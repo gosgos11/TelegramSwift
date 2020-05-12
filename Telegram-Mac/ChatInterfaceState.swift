@@ -147,6 +147,8 @@ func chatTextAttributes(from entities:TextEntitiesMessageAttribute) -> [ChatText
             inputAttributes.append(.uid(entity.range, peerId.id))
         case let .TextUrl(url):
             inputAttributes.append(.url(entity.range, url))
+        case .Strikethrough:
+            inputAttributes.append(.strikethrough(entity.range))
         default:
             break
         }
@@ -198,7 +200,11 @@ private let markdownRegexFormat = "(^|\\s|\\n)(````?)([\\s\\S]+?)(````?)([\\s\\n
 
 private let markdownRegex = try? NSRegularExpression(pattern: markdownRegexFormat, options: [.caseInsensitive, .anchorsMatchLines])
 
-struct ChatTextInputState: PostboxCoding, Equatable {
+final class ChatTextInputState: PostboxCoding, Equatable {
+    static func == (lhs: ChatTextInputState, rhs: ChatTextInputState) -> Bool {
+        return lhs.selectionRange == rhs.selectionRange && lhs.attributes == rhs.attributes && lhs.inputText == rhs.inputText 
+    }
+    
     let inputText: String
     let attributes:[ChatTextInputAttribute]
     let selectionRange: Range<Int>
@@ -238,6 +244,8 @@ struct ChatTextInputState: PostboxCoding, Equatable {
         let string = NSMutableAttributedString()
         _ = string.append(string: inputText, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false)
         
+        
+        string.fixEmojiesFont(theme.fontSize)
         
         var fontAttributes: [NSRange: ChatTextFontAttributes] = [:]
         
@@ -296,6 +304,8 @@ struct ChatTextInputState: PostboxCoding, Equatable {
         let string = NSMutableAttributedString()
         _ = string.append(string: inputText, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false)
         var pres:[Range<Int>] = []
+        var strikethrough:[Range<Int>] = []
+
         for attribute in attributes {
             let attr = attribute.attribute
             
@@ -306,6 +316,8 @@ struct ChatTextInputState: PostboxCoding, Equatable {
                 } else {
                     string.addAttribute(NSAttributedString.Key(rawValue: attr.0), value: attr.1, range: attr.2)
                 }
+            case let .strikethrough(range):
+                strikethrough.append(range)
             default:
                 string.addAttribute(NSAttributedString.Key(rawValue: attr.0), value: attr.1, range: attr.2)
             }
@@ -317,6 +329,13 @@ struct ChatTextInputState: PostboxCoding, Equatable {
                 string.insert(.initialize(string: symbols, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false), at: pre.lowerBound + offset)
                 offset += symbols.count
                 string.insert(.initialize(string: symbols, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false), at: pre.upperBound + offset)
+                offset += symbols.count
+            }
+            for strikethrough in strikethrough.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+                let symbols = "~~"
+                string.insert(.initialize(string: symbols, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false), at: strikethrough.lowerBound + offset)
+                offset += symbols.count
+                string.insert(.initialize(string: symbols, color: theme.colors.text, font: .normal(theme.fontSize), coreText: false), at: strikethrough.upperBound + offset)
                 offset += symbols.count
             }
         }
@@ -489,6 +508,11 @@ struct ChatInterfaceMessageActionsState: PostboxCoding, Equatable {
     init(closedButtonKeyboardMessageId: MessageId?, processedSetupReplyMessageId: MessageId?) {
         self.closedButtonKeyboardMessageId = closedButtonKeyboardMessageId
         self.processedSetupReplyMessageId = processedSetupReplyMessageId
+        
+        if processedSetupReplyMessageId?.id == 349 {
+            var bp:Int = 0
+            bp += 1
+        }
     }
     
     init(decoder: PostboxDecoder) {
@@ -500,6 +524,11 @@ struct ChatInterfaceMessageActionsState: PostboxCoding, Equatable {
         
         if let processedMessageIdPeerId = (decoder.decodeOptionalInt64ForKey("pb.p") as Int64?), let processedMessageIdNamespace = (decoder.decodeOptionalInt32ForKey("pb.n") as Int32?), let processedMessageIdId = (decoder.decodeOptionalInt32ForKey("pb.i") as Int32?) {
             self.processedSetupReplyMessageId = MessageId(peerId: PeerId(processedMessageIdPeerId), namespace: processedMessageIdNamespace, id: processedMessageIdId)
+            
+            if processedMessageIdId == 349 {
+                var bp:Int = 0
+                bp += 1
+            }
         } else {
             self.processedSetupReplyMessageId = nil
         }
@@ -527,9 +556,6 @@ struct ChatInterfaceMessageActionsState: PostboxCoding, Equatable {
         }
     }
     
-    static func ==(lhs: ChatInterfaceMessageActionsState, rhs: ChatInterfaceMessageActionsState) -> Bool {
-        return lhs.closedButtonKeyboardMessageId == rhs.closedButtonKeyboardMessageId && lhs.processedSetupReplyMessageId == rhs.processedSetupReplyMessageId
-    }
     
     func withUpdatedClosedButtonKeyboardMessageId(_ closedButtonKeyboardMessageId: MessageId?) -> ChatInterfaceMessageActionsState {
         return ChatInterfaceMessageActionsState(closedButtonKeyboardMessageId: closedButtonKeyboardMessageId, processedSetupReplyMessageId: self.processedSetupReplyMessageId)
@@ -669,6 +695,7 @@ final class ChatEditState : Equatable {
     static func ==(lhs:ChatEditState, rhs:ChatEditState) -> Bool {
         return lhs.message.id == rhs.message.id && lhs.inputState == rhs.inputState && lhs.loadingState == rhs.loadingState && lhs.editMedia == rhs.editMedia && lhs.editedData == rhs.editedData
     }
+    
 }
 
 

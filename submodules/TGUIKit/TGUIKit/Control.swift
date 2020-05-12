@@ -34,6 +34,8 @@ private let longOverHandleDisposable = MetaDisposable()
 
 open class Control: View {
     
+    public internal(set) weak var popover: Popover?
+    
     open var isEnabled:Bool = true {
         didSet {
             if isEnabled != oldValue {
@@ -67,6 +69,7 @@ open class Control: View {
     private(set) internal var backgroundState:[ControlState:NSColor] = [:]
     private var mouseMovedInside: Bool = true
     private var longInvoked: Bool = false
+    public var handleLongEvent: Bool = true
     open override var backgroundColor: NSColor {
         get{
             return self.style.backgroundColor
@@ -113,6 +116,11 @@ open class Control: View {
     
     public func apply(state:ControlState) -> Void {
         let state:ControlState = self.isSelected ? .Highlight : state
+        if state == .Highlight, (NSEvent.pressedMouseButtons & (1 << 0)) == 0 {
+            self.mouseIsDown = false
+            self.updateState()
+            return
+        }
         if isEnabled {
             if let color = backgroundState[state] {
                 self.layer?.backgroundColor = color.cgColor
@@ -260,14 +268,19 @@ open class Control: View {
             updateState()
             send(event: .Down)
             let point = event.locationInWindow
-            let disposable = (Signal<Void,Void>.single(Void()) |> delay(0.35, queue: Queue.mainQueue())).start(next: { [weak self] in
-                if let inside = self?.mouseInside(), inside, let wPoint = self?.window?.mouseLocationOutsideOfEventStream, NSPointInRect(point, NSMakeRect(wPoint.x - 2, wPoint.y - 2, 4, 4)) {
-                    self?.longInvoked = true
-                    self?.send(event: .LongMouseDown)
-                }
-            })
-            
-            longHandleDisposable.set(disposable)
+            if handleLongEvent {
+                let disposable = (Signal<Void,Void>.single(Void()) |> delay(0.35, queue: Queue.mainQueue())).start(next: { [weak self] in
+                    if let inside = self?.mouseInside(), inside, let wPoint = self?.window?.mouseLocationOutsideOfEventStream, NSPointInRect(point, NSMakeRect(wPoint.x - 2, wPoint.y - 2, 4, 4)) {
+                        self?.longInvoked = true
+                        self?.send(event: .LongMouseDown)
+                    }
+                })
+                
+                longHandleDisposable.set(disposable)
+            } else {
+                longHandleDisposable.set(nil)
+            }
+           
             
         } else {
             super.mouseDown(with: event)
@@ -282,6 +295,10 @@ open class Control: View {
         if userInteractionEnabled && !event.modifierFlags.contains(.control) {
             if isEnabled && layer!.opacity > 0 {
                 send(event: .Up)
+                
+                if longInvoked {
+                    send(event: .LongMouseUp)
+                }
                 
                 if mouseInside() && !longInvoked {
                     if event.clickCount == 1  {

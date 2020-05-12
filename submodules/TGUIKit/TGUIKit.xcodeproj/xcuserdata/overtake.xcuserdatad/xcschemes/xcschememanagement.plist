@@ -7,9 +7,9 @@
 		<key>TGUIKit.xcscheme</key>
 		<dict>
 			<key>isShown</key>
-			<false/>
+			<true/>
 			<key>orderHint</key>
-			<integer>22</integer>
+			<integer>18</integer>
 		</dict>
 	</dict>
 </dict>

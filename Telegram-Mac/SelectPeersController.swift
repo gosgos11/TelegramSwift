@@ -356,7 +356,7 @@ fileprivate func prepareEntries(from:[SelectPeerEntry]?, to:[SelectPeerEntry], c
                 return GeneralInteractedRowItem(initialSize, stableId: entry.stableId, name: L10n.peerSelectInviteViaLink, nameStyle: blueActionButton, type: .none, action: {
                     action()
                     interactions.close()
-                }, thumb: GeneralThumbAdditional(thumb: theme.icons.peerInfoAddMember, textInset: 36), inset: NSEdgeInsetsMake(0, 19, 0, 10))
+                }, thumb: GeneralThumbAdditional(thumb: theme.icons.group_invite_via_link, textInset: 39), inset: NSEdgeInsetsMake(0, 16, 0, 10))
             }
             
             let _ = item.makeSize(initialSize.width)
@@ -752,7 +752,7 @@ final class SelectChatsBehavior: SelectPeersBehavior {
 
                     for entry in value.0.entries.reversed() {
                         switch entry {
-                        case let .MessageEntry(_, _, _, _, _, renderedPeer, _, _, _):
+                        case let .MessageEntry(_, _, _, _, _, renderedPeer, _, _, _, _):
                             if let peer = renderedPeer.chatMainPeer, peer.canSendMessage, peer.canInviteUsers, peer.isSupergroup || peer.isGroup {
                                 entries.append(peer)
                             }
@@ -821,7 +821,7 @@ class SelectUsersAndGroupsBehavior : SelectPeersBehavior {
                     var presences:[PeerId : PeerPresence] = [:]
                     for entry in entries.reversed() {
                         switch entry {
-                        case let .MessageEntry(_, _, _, _, _, peer, presence, _, _):
+                        case let .MessageEntry(_, _, _, _, _, peer, presence, _, _, _):
                             if let peer = peer.chatMainPeer, !peer.isChannel && !peer.isBot {
                                 peers.append(peer)
                                 if let presence = presence {
@@ -1110,13 +1110,15 @@ class SelectPeersController: ComposeViewController<[PeerId], Void, SelectPeersCo
                 alert(for: mainWindow, info: L10n.composeCreateGroupLimitError)
             }
             
-            for item in added {
-                genericView.tokenView.addToken(token: SearchToken(name: value.peers[item]?.compactDisplayTitle ?? tr(L10n.peerDeletedUser), uniqueId: item.toInt64()), animated: animated)
+            let tokens = added.map {
+                return SearchToken(name: value.peers[$0]?.compactDisplayTitle ?? L10n.peerDeletedUser, uniqueId: $0.toInt64())
             }
+            genericView.tokenView.addTokens(tokens: tokens, animated: animated)
             
-            for item in removed {
-                genericView.tokenView.removeToken(uniqueId: item.toInt64(), animated: animated)
+            let idsToRemove:[Int64] = removed.map {
+                $0.toInt64()
             }
+            genericView.tokenView.removeTokens(uniqueIds: idsToRemove, animated: animated)
             
             self.nextEnabled(!value.selected.isEmpty)
             
@@ -1291,14 +1293,15 @@ private class SelectPeersModalController : ModalViewController, Notifable {
                 let added = value.selected.subtracting(oldValue.selected)
                 let removed = oldValue.selected.subtracting(value.selected)
                 
-                for item in added {
-                    genericView.tokenView.addToken(token: SearchToken(name: value.peers[item]?.compactDisplayTitle ?? tr(L10n.peerDeletedUser), uniqueId: item.toInt64()), animated: animated)
+                let tokens = added.map {
+                    return SearchToken(name: value.peers[$0]?.compactDisplayTitle ?? L10n.peerDeletedUser, uniqueId: $0.toInt64())
                 }
+                genericView.tokenView.addTokens(tokens: tokens, animated: animated)
                 
-                for item in removed {
-                    genericView.tokenView.removeToken(uniqueId: item.toInt64(), animated: animated)
+                let idsToRemove:[Int64] = removed.map {
+                    $0.toInt64()
                 }
-                
+                genericView.tokenView.removeTokens(uniqueIds: idsToRemove, animated: animated)                
                 
                 modal?.interactions?.updateEnables(!value.selected.isEmpty)
             }

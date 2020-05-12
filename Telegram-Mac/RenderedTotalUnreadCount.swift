@@ -8,7 +8,7 @@ enum RenderedTotalUnreadCountType {
 }
 
 func renderedTotalUnreadCount(transaction: Transaction) -> (Int32, RenderedTotalUnreadCountType) {
-    let totalUnreadState = transaction.getTotalUnreadState()
+    let totalUnreadState = transaction.getTotalUnreadState(groupId: .root)
     let inAppSettings: InAppNotificationSettings = (transaction.getPreferencesEntry(key: ApplicationSharedPreferencesKeys.inAppNotificationSettings) as? InAppNotificationSettings) ?? .defaultSettings
     let type: RenderedTotalUnreadCountType
     switch inAppSettings.totalUnreadCountDisplayStyle {
@@ -55,7 +55,11 @@ func renderedTotalUnreadCount(accountManager: AccountManager, postbox: Postbox) 
             case .filtered:
                 type = .filtered
             }
-            return (totalUnreadState.count(for: inAppSettings.totalUnreadCountDisplayStyle.category, in: inAppSettings.totalUnreadCountDisplayCategory.statsType, with: inAppSettings.totalUnreadCountIncludeTags), type)
+            if inAppSettings.badgeEnabled {
+                return (totalUnreadState.count(for: inAppSettings.totalUnreadCountDisplayStyle.category, in: inAppSettings.totalUnreadCountDisplayCategory.statsType, with: inAppSettings.totalUnreadCountIncludeTags), type)
+            } else {
+                return (0, type)
+            }
         }
         |> distinctUntilChanged(isEqual: { lhs, rhs in
             return lhs == rhs

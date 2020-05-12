@@ -1189,7 +1189,7 @@ enum GroupInfoEntry: PeerInfoEntry {
         case let .addMember(_, inviteViaLink, viewType):
             return GeneralInteractedRowItem(initialSize, stableId: stableId.hashValue, name: L10n.peerInfoAddMember, nameStyle: blueActionButton, type: .none, viewType: viewType, action: { () in
                 arguments.addMember(inviteViaLink)
-            }, thumb: GeneralThumbAdditional(thumb: theme.icons.peerInfoAddMember, textInset: 52, thumbInset: 9))
+            }, thumb: GeneralThumbAdditional(thumb: theme.icons.peerInfoAddMember, textInset: 52, thumbInset: 5))
         case let .member(_, _, _, peer, presence, inputActivity, memberStatus, editing, enabled, viewType):
             let label: String
             switch memberStatus {
@@ -1469,7 +1469,7 @@ func groupInfoEntries(view: PeerView, arguments: PeerInfoArguments, inputActivit
                     let editing:ShortPeerDeleting?
                     
                     if state.editingState != nil, let group = group as? TelegramGroup {
-                        let deletable:Bool = group.canRemoveParticipant(sortedParticipants[i])
+                        let deletable:Bool = group.canRemoveParticipant(sortedParticipants[i]) || (sortedParticipants[i].invitedBy == arguments.context.peerId && sortedParticipants[i].peerId != arguments.context.peerId)
                         editing = ShortPeerDeleting(editable: deletable)
                     } else {
                         editing = nil
@@ -1500,6 +1500,9 @@ func groupInfoEntries(view: PeerView, arguments: PeerInfoArguments, inputActivit
                         updatedParticipants.append(RenderedChannelParticipant(participant: .member(id: participant.peer.id, invitedAt: participant.timestamp, adminInfo: nil, banInfo: nil, rank: nil), peer: participant.peer))
                         if let presence = participant.presence, peerPresences[participant.peer.id] == nil {
                             peerPresences[participant.peer.id] = presence
+                        }
+                        if participant.peer.id == arguments.context.account.peerId {
+                            peerPresences[participant.peer.id] = TelegramUserPresence(status: .present(until: Int32.max), lastActivity: Int32.max)
                         }
                         if peers[participant.peer.id] == nil {
                             peers[participant.peer.id] = participant.peer

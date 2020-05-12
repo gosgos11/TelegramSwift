@@ -130,7 +130,7 @@ class ChatMessageItem: ChatRowItem {
             execute(inapp: link)
         } else if unsupported {
             #if APP_STORE
-            execute(inapp: inAppLink.external(link: "https://itunes.apple.com/us/app/telegram/id747648890", false))
+            execute(inapp: inAppLink.external(link: "https://apps.apple.com/us/app/telegram/id747648890", false))
             #else
             (NSApp.delegate as? AppDelegate)?.checkForUpdates("")
             #endif
@@ -193,7 +193,7 @@ class ChatMessageItem: ChatRowItem {
                 
                 messageAttr = ChatMessageItem.applyMessageEntities(with: message.attributes, for: message.text, context: context, fontSize: theme.fontSize, openInfo:chatInteraction.openInfo, botCommand:chatInteraction.sendPlainText, hashtag: context.sharedContext.bindings.globalSearch, applyProxy: chatInteraction.applyProxy, textColor: theme.chat.textColor(isIncoming, entry.renderType == .bubble), linkColor: theme.chat.linkColor(isIncoming, entry.renderType == .bubble), monospacedPre: theme.chat.monospacedPreColor(isIncoming, entry.renderType == .bubble), monospacedCode: theme.chat.monospacedCodeColor(isIncoming, entry.renderType == .bubble), mediaDuration: mediaDuration, timecode: { timecode in
                     openSpecificTimecodeFromReply?(timecode)
-                }).mutableCopy() as! NSMutableAttributedString
+                }, openBank: chatInteraction.openBank).mutableCopy() as! NSMutableAttributedString
 
                 messageAttr.fixUndefinedEmojies()
                 
@@ -555,6 +555,7 @@ class ChatMessageItem: ChatRowItem {
     }
     
     override var additionalLineForDateInBubbleState: CGFloat? {
+
         if containsBigEmoji {
             return rightSize.height + 3
         }
@@ -572,7 +573,7 @@ class ChatMessageItem: ChatRowItem {
             if let webpageLayout = webpageLayout as? WPArticleLayout {
                 if let textLayout = webpageLayout.textLayout {
                     if webpageLayout.hasInstantPage {
-                        return rightSize.height
+                        return rightSize.height + 4
                     }
                     if textLayout.lines.count > 1, let line = textLayout.lines.last, line.frame.width > realContentSize.width - (rightSize.width + insetBetweenContentAndDate) {
                         return rightSize.height
@@ -581,7 +582,7 @@ class ChatMessageItem: ChatRowItem {
                         return rightSize.height
                     }
                     if actionButtonText != nil {
-                        return rightSize.height
+                        return rightSize.height + 4
                     }
                     if webpageLayout.groupLayout != nil {
                         return rightSize.height
@@ -601,7 +602,7 @@ class ChatMessageItem: ChatRowItem {
             if contentOffset.x + textLayout.layoutSize.width - (rightSize.width + insetBetweenContentAndDate) > width {
                 return rightSize.height
             }
-        } else if let line = textLayout.lines.last, max(realContentSize.width, nameWidth) < line.frame.width + (rightSize.width + insetBetweenContentAndDate) {
+        } else if let line = textLayout.lines.last, max(realContentSize.width, maxTitleWidth) < line.frame.width + (rightSize.width + insetBetweenContentAndDate) {
             return rightSize.height
         }
         return nil
@@ -798,7 +799,7 @@ class ChatMessageItem: ChatRowItem {
         return ChatMessageView.self
     }
     
-    static func applyMessageEntities(with attributes:[MessageAttribute], for text:String, context: AccountContext, fontSize: CGFloat, openInfo:@escaping (PeerId, Bool, MessageId?, ChatInitialAction?)->Void, botCommand:@escaping (String)->Void, hashtag:@escaping (String)->Void, applyProxy:@escaping (ProxyServerSettings)->Void, textColor: NSColor = theme.colors.text, linkColor: NSColor = theme.colors.link, monospacedPre:NSColor = theme.colors.monospacedPre, monospacedCode: NSColor = theme.colors.monospacedCode, mediaDuration: Double? = nil, timecode: @escaping(Double?)->Void) -> NSAttributedString {
+    static func applyMessageEntities(with attributes:[MessageAttribute], for text:String, context: AccountContext, fontSize: CGFloat, openInfo:@escaping (PeerId, Bool, MessageId?, ChatInitialAction?)->Void, botCommand:@escaping (String)->Void, hashtag:@escaping (String)->Void, applyProxy:@escaping (ProxyServerSettings)->Void, textColor: NSColor = theme.colors.text, linkColor: NSColor = theme.colors.link, monospacedPre:NSColor = theme.colors.monospacedPre, monospacedCode: NSColor = theme.colors.monospacedCode, mediaDuration: Double? = nil, timecode: @escaping(Double?)->Void = { _ in }, openBank: @escaping(String)->Void = { _ in }) -> NSAttributedString {
         var entities: [MessageTextEntity] = []
         for attribute in attributes {
             if let attribute = attribute as? TextEntitiesMessageAttribute {
@@ -928,6 +929,14 @@ class ChatMessageItem: ChatRowItem {
                 string.addAttribute(NSAttributedString.Key.strikethroughStyle, value: true, range: range)
             case .Underline:
                 string.addAttribute(NSAttributedString.Key.underlineStyle, value: true, range: range)
+            case .BankCard:
+                if nsString == nil {
+                    nsString = text as NSString
+                }
+                 string.addAttribute(NSAttributedString.Key.foregroundColor, value: linkColor, range: range)
+                string.addAttribute(NSAttributedString.Key.link, value: inAppLink.callback(nsString!.substring(with: range), { bankCard in
+                    openBank(bankCard)
+                }), range: range)
             case let .Custom(type):
                 if type == ApplicationSpecificEntityType.Timecode {
                     string.addAttribute(NSAttributedString.Key.foregroundColor, value: linkColor, range: range)

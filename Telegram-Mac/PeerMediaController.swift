@@ -131,7 +131,10 @@ class PeerMediaControllerView : View {
     fileprivate let segmentPanelView: SegmentContainerView = SegmentContainerView(frame: NSZeroRect)
     fileprivate var searchPanelView: SearchContainerView?
 
-    private weak var mainView:NSView?
+    private(set) weak var mainView:NSView?
+    
+
+    
     private let separator:View = View()
     private var isSelectionState:Bool = false
     private var chatInteraction:ChatInteraction?
@@ -283,10 +286,17 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
     private let loadFwdMessagesDisposable = MetaDisposable()
     private let loadSelectionMessagesDisposable = MetaDisposable()
     private let searchValueDisposable = MetaDisposable()
+    private let loadListsDisposable = MetaDisposable()
     private let currentModeValue:ValuePromise<PeerMediaCollectionMode> = ValuePromise(.photoOrVideo, ignoreRepeated: true)
     private var searchController: PeerMediaListController?
     
-    
+    var currentMainView:((NSView?, Bool, Bool)->Void)? = nil {
+        didSet {
+            if isLoaded() {
+                currentMainView?(genericView.mainView, false, false)
+            }
+        }
+    }
     
     init(context: AccountContext, peerId:PeerId, tagMask:MessageTags) {
         self.peerId = peerId
@@ -468,15 +478,28 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
                         var canDelete:Bool = true
                         var canDeleteForEveryone = true
                         var otherCounter:Int32 = 0
+                        var _mustDeleteForEveryoneMessage: Bool = true
                         for message in messages {
                             if !canDeleteMessage(message, account: context.account) {
                                 canDelete = false
                             }
+                            if !mustDeleteForEveryoneMessage(message) {
+                                _mustDeleteForEveryoneMessage = false
+                            }
                             if !canDeleteForEveryoneMessage(message, context: context) {
                                 canDeleteForEveryone = false
                             } else {
-                                if message.author?.id != context.peerId && !(context.limitConfiguration.canRemoveIncomingMessagesInPrivateChats && message.peers[message.id.peerId] is TelegramUser)  {
-                                    otherCounter += 1
+                                if message.effectiveAuthor?.id != context.peerId && !(context.limitConfiguration.canRemoveIncomingMessagesInPrivateChats && message.peers[message.id.peerId] is TelegramUser)  {
+                                    if let peer = message.peers[message.id.peerId] as? TelegramGroup {
+                                        inner: switch peer.role {
+                                        case .member:
+                                            otherCounter += 1
+                                        default:
+                                            break inner
+                                        }
+                                    } else {
+                                        otherCounter += 1
+                                    }
                                 }
                             }
                         }
@@ -518,9 +541,13 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
                                     
                                 }), for: context.window)
                             } else {
-                                let thrid:String? = canDeleteForEveryone ? peer.isUser ? tr(L10n.chatMessageDeleteForMeAndPerson(peer.compactDisplayTitle)) : tr(L10n.chatConfirmDeleteMessagesForEveryone) : nil
+                                let thrid:String? = (canDeleteForEveryone ? peer.isUser ? L10n.chatMessageDeleteForMeAndPerson(peer.compactDisplayTitle) : L10n.chatConfirmDeleteMessagesForEveryone : nil)
                                 
-                                modernConfirm(for: context.window, account: context.account, peerId: nil, header: thrid == nil ? L10n.chatConfirmActionUndonable : L10n.chatConfirmDeleteMessages, information: thrid == nil ? L10n.chatConfirmDeleteMessages : nil, okTitle: L10n.confirmDelete, thridTitle: thrid, successHandler: { result in
+                                modernConfirm(for: context.window, account: context.account, peerId: nil, header: thrid == nil ? L10n.chatConfirmActionUndonable : L10n.chatConfirmDeleteMessagesCountable(messages.count), information: thrid == nil ? _mustDeleteForEveryoneMessage ? L10n.chatConfirmDeleteForEveryoneCountable(messages.count) : L10n.chatConfirmDeleteMessagesCountable(messages.count) : nil, okTitle: L10n.confirmDelete, thridTitle: thrid, successHandler: { [weak strongSelf] result in
+                                    
+                                    guard let `strongSelf` = strongSelf else {
+                                        return
+                                    }
                                     let type:InteractiveMessagesDeletionType
                                     switch result {
                                     case .basic:
@@ -549,7 +576,21 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
         }
         
         self.ready.set(combined |> deliverOnMainQueue)
+        
+        let ready = self.ready.get() |> filter { $0 } |> take(1) |> deliverOnMainQueue
+        
+        loadListsDisposable.set(ready.start(next: { [weak self] _ in
+            guard let `self` = self else {
+                return
+            }
+            for i in 0 ..< self.listControllers.count {
+                self.listControllers[i].loadViewIfNeeded(self.bounds)
+                self.listControllers[i].load(with: self.tagsList[i].tagsValue)
+            }
+        }))
+        
     }
+    
     
     private var currentTable: TableView? {
         if self.mode == .photoOrVideo {
@@ -561,10 +602,7 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
     override func loadView() {
         super.loadView()
  
-        for i in 0 ..< listControllers.count {
-            listControllers[i].loadViewIfNeeded(bounds)
-            listControllers[i].load(with: tagsList[i].tagsValue)
-        }
+
         mediaGrid.loadViewIfNeeded(bounds)
         
         mediaGrid.viewWillAppear(false)
@@ -578,7 +616,8 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
     
     private func toggle(with mode:PeerMediaCollectionMode, animated:Bool = false) {
         currentModeValue.set(mode)
-        if self.mode != mode {
+        let isUpdated = self.mode != mode
+        if isUpdated {
             let oldMode = self.mode
             self.mode = mode
             if mode == .photoOrVideo {
@@ -643,15 +682,15 @@ class PeerMediaController: EditableViewController<PeerMediaControllerView>, Noti
                     })
                 }))
             }
-            
         }
-        
+        self.currentMainView?(genericView.mainView, animated, isUpdated)
     }
     
     deinit {
         messagesActionDisposable.dispose()
         loadFwdMessagesDisposable.dispose()
         loadSelectionMessagesDisposable.dispose()
+        loadListsDisposable.dispose()
     }
     
     override func updateLocalizationAndTheme(theme: PresentationTheme) {

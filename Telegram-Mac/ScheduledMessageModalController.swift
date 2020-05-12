@@ -7,8 +7,10 @@
 //
 
 import TGUIKit
-
+import TelegramCore
+import SwiftSignalKit
 import SyncCore
+import Postbox
 
 private var timeIntervals:[TimeInterval?]  {
     var intervals:[TimeInterval?] = []
@@ -55,7 +57,7 @@ private func formatDay(_ date: Date) -> String {
 
 private func formatTime(_ date: Date) -> String {
     let timeFormatter = DateFormatter()
-    timeFormatter.timeStyle = .short
+    timeFormatter.timeStyle = .medium
    // timeFormatter.timeZone = TimeZone(abbreviation: "UTC")!
     return timeFormatter.string(from: date)
 }
@@ -63,14 +65,14 @@ private func formatTime(_ date: Date) -> String {
 final class ScheduledMessageModalView : View {
     fileprivate let dayPicker: DatePicker<Date>
     private let atView = TextView()
-    fileprivate let timePicker: DatePicker<Date>
+    fileprivate let timePicker: TimePicker
     private let containerView = View()
     fileprivate let sendOn = TitleButton()
     fileprivate let sendWhenOnline = TitleButton()
     required init(frame frameRect: NSRect) {
         
         self.dayPicker = DatePicker<Date>(selected: DatePickerOption<Date>(name: formatDay(Date()), value: Date()))
-        self.timePicker = DatePicker<Date>(selected: DatePickerOption<Date>(name: "22:00", value: Date()))
+        self.timePicker = TimePicker(selected: TimePickerOption(hours: 0, minutes: 0, seconds: 0))
         super.init(frame: frameRect)
         containerView.addSubview(self.dayPicker)
         containerView.addSubview(self.atView)
@@ -135,16 +137,27 @@ final class ScheduledMessageModalView : View {
     }
 }
 
+
+private extension TimePickerOption {
+    var interval: TimeInterval {
+        let hours = Double(self.hours) * 60.0 * 60
+        let minutes = Double(self.minutes) * 60.0
+        let seconds = Double(self.seconds)
+        return hours + minutes + seconds
+    }
+}
 class ScheduledMessageModalController: ModalViewController {
     private let context: AccountContext
     private let scheduleAt: (Date)->Void
     private let defaultDate: Date?
-    private let sendWhenOnline: Bool
-    init(context: AccountContext, defaultDate: Date? = nil, sendWhenOnline: Bool = true, scheduleAt:@escaping(Date)->Void) {
+    private let peerId: PeerId
+    private var sendWhenOnline: Bool = false
+    private let disposable = MetaDisposable()
+    init(context: AccountContext, defaultDate: Date? = nil, peerId: PeerId, scheduleAt:@escaping(Date)->Void) {
         self.context = context
         self.defaultDate = defaultDate
         self.scheduleAt = scheduleAt
-        self.sendWhenOnline = sendWhenOnline
+        self.peerId = peerId
         super.init(frame: NSMakeRect(0, 0, 350, 200))
         self.bar = .init(height: 0)
     }
@@ -177,7 +190,7 @@ class ScheduledMessageModalController: ModalViewController {
     
     private func applyDay(_ date: Date) {
         genericView.dayPicker.selected = DatePickerOption(name: formatDay(date), value: date)
-        let current = self.genericView.timePicker.selected.value
+        let current = date.addingTimeInterval(self.genericView.timePicker.selected.interval)
 
         if CalendarUtils.isSameDate(Date(), date: date, checkDay: true) {
             
@@ -206,8 +219,14 @@ class ScheduledMessageModalController: ModalViewController {
     }
     
     private func applyTime(_ date: Date) {
-        genericView.timePicker.selected = DatePickerOption(name: formatTime(date), value: date)
         
+        
+        var t: time_t = time_t(date.timeIntervalSince1970)
+        var timeinfo: tm = tm()
+        localtime_r(&t, &timeinfo)
+        
+        genericView.timePicker.selected = TimePickerOption(hours: timeinfo.tm_hour, minutes: timeinfo.tm_min, seconds: timeinfo.tm_sec)
+
         if CalendarUtils.isSameDate(Date(), date: date, checkDay: true) {
             genericView.sendOn.set(text: L10n.scheduleSendToday(formatTime(date)), for: .Normal)
         } else {
@@ -215,11 +234,20 @@ class ScheduledMessageModalController: ModalViewController {
         }
     }
     
+    override var handleAllEvents: Bool {
+        return true
+    }
+    
     private func schedule() {
-        
-        let date = self.genericView.timePicker.selected.value
-        
-        self.scheduleAt(date.addingTimeInterval(-context.timeDifference))
+        let day = self.genericView.dayPicker.selected.value
+        let date = day.startOfDay.addingTimeInterval(self.genericView.timePicker.selected.interval)
+        if CalendarUtils.isSameDate(Date(), date: day, checkDay: true) {
+            if Date() > date {
+                genericView.timePicker.shake()
+                return
+            }
+        }
+        self.scheduleAt(date)
         self.close()
     }
     
@@ -228,26 +256,91 @@ class ScheduledMessageModalController: ModalViewController {
         return .invoked
     }
     
+    override func firstResponder() -> NSResponder? {
+        return genericView.timePicker.firstResponder
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        window?.set(handler: { () -> KeyHandlerResult in
+            
+            return .invokeNext
+        }, with: self, for: .Tab, priority: .modal)
+        window?.set(handler: { () -> KeyHandlerResult in
+            
+            return .invokeNext
+        }, with: self, for: .LeftArrow, priority: .modal)
+        window?.set(handler: { () -> KeyHandlerResult in
+            
+            return .invokeNext
+        }, with: self, for: .RightArrow, priority: .modal)
+    }
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        window?.removeAllHandlers(for: self)
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        let peerId = self.peerId
+        let context = self.context
+        let presence = context.account.postbox.transaction {
+            $0.getPeerPresence(peerId: peerId) as? TelegramUserPresence
+        } |> deliverOnMainQueue
+        
+        disposable.set(presence.start(next: { [weak self] presence in
+            
+            var sendWhenOnline: Bool = false
+            if let presence = presence {
+                switch presence.status {
+                case .present:
+                    sendWhenOnline = peerId != context.peerId
+                default:
+                    break
+                }
+            }
+            self?.sendWhenOnline = sendWhenOnline
+            self?.initialize()
+        }))
+        
+    }
+    
+    private func initialize() {
         let date = self.defaultDate ?? Date()
         
+        var t: time_t = time_t(date.timeIntervalSince1970)
+        var timeinfo: tm = tm()
+        localtime_r(&t, &timeinfo)
+        
         self.genericView.dayPicker.selected = DatePickerOption<Date>(name: formatDay(date), value: date)
-        self.genericView.timePicker.selected = DatePickerOption<Date>(name: formatTime(date), value: date)
+        self.genericView.timePicker.selected = TimePickerOption(hours: 0, minutes: 0, seconds: 0)
         
         self.genericView.possibleSendWhenOnline(self.sendWhenOnline)
         
         self.applyDay(date)
         
+        self.genericView.timePicker.update = { [weak self] updated in
+            guard let `self` = self else {
+                return false
+            }
+            
+            let day = self.genericView.dayPicker.selected.value
+            
+            let date = day.startOfDay.addingTimeInterval(updated.interval)
+            
+            self.applyTime(date)
+            return true
+        }
+        
         self.genericView.sendOn.set(handler: { [weak self] _ in
             self?.schedule()
-        }, for: .Click)
+            }, for: .Click)
         
         self.genericView.sendWhenOnline.set(handler: { [weak self] _ in
             self?.scheduleAt(Date(timeIntervalSince1970: TimeInterval(scheduleWhenOnlineTimestamp)))
             self?.close()
-        }, for: .Click)
+            }, for: .Click)
         
         self.readyOnce()
         
@@ -259,7 +352,7 @@ class ScheduledMessageModalController: ModalViewController {
                 showPopover(for: control, with: calendar, edge: .maxY, inset: NSMakePoint(-8, -50))
             }
             
-        }, for: .Down)
+            }, for: .Down)
         
         self.genericView.timePicker.set(handler: { [weak self] control in
             if let control = control as? DatePicker<Date>, let `self` = self, let window = self.window, !hasPopover(window) {
@@ -277,7 +370,7 @@ class ScheduledMessageModalController: ModalViewController {
                         }
                         items.append(SPopoverItem(formatTime(date), { [weak self] in
                             self?.applyTime(date)
-                        }, height: 30))
+                            }, height: 30))
                     } else if !items.isEmpty {
                         items.append(SPopoverItem())
                     }
@@ -285,7 +378,10 @@ class ScheduledMessageModalController: ModalViewController {
                 showPopover(for: control, with: SPopoverViewController(items: items, visibility: 6), edge: .maxY, inset: NSMakePoint(0, -50))
             }
             
-        }, for: .Down)
-        
+            }, for: .Down)
+    }
+    
+    deinit {
+        disposable.dispose()
     }
 }

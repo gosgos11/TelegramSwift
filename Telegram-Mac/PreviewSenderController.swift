@@ -126,7 +126,7 @@ fileprivate class PreviewSenderView : Control {
         backgroundColor = theme.colors.background
         separator.backgroundColor = theme.colors.border
         textContainerView.backgroundColor = theme.colors.background
-        
+        textView.setBackgroundColor(theme.colors.background)
         closeButton.set(image: theme.icons.modalClose, for: .Normal)
         _ = closeButton.sizeToFit()
         
@@ -136,7 +136,7 @@ fileprivate class PreviewSenderView : Control {
         collageButton.appTooltip = L10n.previewSenderCollageTooltip
         archiveButton.appTooltip = L10n.previewSenderArchiveTooltip
 
-        photoButton.set(image: ControlStyle(highlightColor: theme.colors.grayIcon).highlight(image: theme.icons.chatAttachPhoto), for: .Normal)
+        photoButton.set(image: ControlStyle(highlightColor: theme.colors.grayIcon).highlight(image: theme.icons.previewSenderPhoto), for: .Normal)
         _ = photoButton.sizeToFit()
         
         photoButton.set(handler: { [weak self] _ in
@@ -176,10 +176,10 @@ fileprivate class PreviewSenderView : Control {
             self?.controller?.close()
         }, for: .Click)
         
-        fileButton.set(image: ControlStyle(highlightColor: theme.colors.grayIcon).highlight(image: theme.icons.chatAttachFile), for: .Normal)
+        fileButton.set(image: ControlStyle(highlightColor: theme.colors.grayIcon).highlight(image: theme.icons.previewSenderFile), for: .Normal)
         _ = fileButton.sizeToFit()
         
-        collageButton.set(image: theme.icons.previewCollage, for: .Normal)
+        collageButton.set(image: theme.icons.previewSenderCollage, for: .Normal)
         _ = collageButton.sizeToFit()
         
         archiveButton.set(image: theme.icons.previewSenderArchive, for: .Normal)
@@ -243,7 +243,7 @@ fileprivate class PreviewSenderView : Control {
                 switch chatInteraction.mode {
                 case .history:
                     items.append(SPopoverItem(peer.id == chatInteraction.context.peerId ? L10n.chatSendSetReminder : L10n.chatSendScheduledMessage, {
-                        showModal(with: ScheduledMessageModalController(context: context, sendWhenOnline: peer.isUser && peer.id != context.peerId, scheduleAt: { [weak controller] date in
+                        showModal(with: ScheduledMessageModalController(context: context, peerId: peer.id, scheduleAt: { [weak controller] date in
                             controller?.send(false, atDate: date)
                         }), for: context.window)
                     }))
@@ -810,10 +810,17 @@ class PreviewSenderController: ModalViewController, TGModernGrowingDelegate, Not
     }
     
     func send(_ silent: Bool, atDate: Date? = nil) {
+        
+        let text = self.genericView.textView.string().trimmed
+        if text.length > ChatPresentationInterfaceState.maxShortInput {
+            alert(for: chatInteraction.context.window, info: L10n.chatInputErrorMessageTooLongCountable(text.length - Int(ChatPresentationInterfaceState.maxShortInput)))
+            return
+        }
+        
         switch chatInteraction.mode {
         case .scheduled:
             if let peer = chatInteraction.peer {
-                showModal(with: ScheduledMessageModalController(context: context, sendWhenOnline: peer.isUser && peer.id != context.peerId, scheduleAt: { [weak self] date in
+                showModal(with: ScheduledMessageModalController(context: context, peerId: peer.id, scheduleAt: { [weak self] date in
                     self?.sendCurrentMedia?(silent, date)
                 }), for: context.window)
             }
@@ -1554,7 +1561,7 @@ class PreviewSenderController: ModalViewController, TGModernGrowingDelegate, Not
     }
     
     func maxCharactersLimit(_ textView: TGModernGrowingTextView!) -> Int32 {
-        return 1024
+        return ChatPresentationInterfaceState.maxInput
     }
     
     override func viewClass() -> AnyClass {

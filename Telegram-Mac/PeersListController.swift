@@ -173,6 +173,81 @@ import SyncCore
  */
 
 
+final class RevealAllChatsView : Control {
+    let textView: TextView = TextView()
+
+    var layoutState: SplitViewState = .dual {
+        didSet {
+            needsLayout = true
+        }
+    }
+    
+    
+    
+    required init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        textView.userInteractionEnabled = false
+        textView.isSelectable = false
+        addSubview(textView)
+        
+        let layout = TextViewLayout(.initialize(string: L10n.chatListCloseFilter, color: .white, font: .medium(.title)))
+        layout.measure(width: max(280, frame.width))
+        textView.update(layout)
+        
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 5
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.1)
+        shadow.shadowOffset = NSMakeSize(0, 2)
+        self.shadow = shadow
+        set(background: theme.colors.accent, for: .Normal)
+    }
+    
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+    }
+    
+    override var backgroundColor: NSColor {
+        didSet {
+            textView.backgroundColor = backgroundColor
+        }
+    }
+    
+    override func updateLocalizationAndTheme(theme: PresentationTheme) {
+        super.updateLocalizationAndTheme(theme: theme)
+        needsLayout = true
+    }
+    
+    
+    
+    override func layout() {
+        super.layout()
+        textView.center()
+        
+        layer?.cornerRadius = frame.height / 2
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+final class FilterTabsView : View {
+    let tabs: ScrollableSegmentView = ScrollableSegmentView(frame: NSZeroRect)
+    required init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        addSubview(tabs)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func layout() {
+        super.layout()
+        tabs.frame = bounds
+    }
+}
+
 class PeerListContainerView : View {
     private let backgroundView = BackgroundView(frame: NSZeroRect)
     var tableView = TableView(frame:NSZeroRect, drawBorder: true) {
@@ -181,12 +256,15 @@ class PeerListContainerView : View {
             addSubview(tableView)
         }
     }
+    private let searchContainer: View = View()
+    
     let searchView:SearchView = SearchView(frame:NSMakeRect(10, 0, 0, 0))
     let compose:ImageButton = ImageButton()
     fileprivate let proxyButton:ImageButton = ImageButton()
     private let proxyConnecting: ProgressIndicator = ProgressIndicator(frame: NSMakeRect(0, 0, 11, 11))
     private var searchState: SearchFieldState = .None
     
+
     var mode: PeerListMode = .plain {
         didSet {
             switch mode {
@@ -194,6 +272,8 @@ class PeerListContainerView : View {
                 compose.isHidden = true
             case .plain:
                 compose.isHidden = false
+            case .filter:
+                compose.isHidden = true
             }
             needsLayout = true
         }
@@ -203,10 +283,11 @@ class PeerListContainerView : View {
         self.border = [.Right]
         compose.autohighlight = false
         autoresizesSubviews = false
+        addSubview(searchContainer)
         addSubview(tableView)
-        addSubview(compose)
-        addSubview(proxyButton)
-        addSubview(searchView)
+        searchContainer.addSubview(compose)
+        searchContainer.addSubview(proxyButton)
+        searchContainer.addSubview(searchView)
         proxyButton.addSubview(proxyConnecting)
         setFrameSize(frameRect.size)
         updateLocalizationAndTheme(theme: theme)
@@ -217,6 +298,7 @@ class PeerListContainerView : View {
         tableView.getBackgroundColor = {
             .clear
         }
+        layout()
     }
     
     fileprivate func updateProxyPref(_ pref: ProxySettings, _ connection: ConnectionStatus) {
@@ -242,7 +324,7 @@ class PeerListContainerView : View {
     
     func searchStateChanged(_ state: SearchFieldState, animated: Bool) {
         self.searchState = state
-        searchView.change(size: NSMakeSize(state == .Focus || mode.isFolder ? frame.width - searchView.frame.minX * 2 : (frame.width - (36 + compose.frame.width) - (proxyButton.isHidden ? 0 : proxyButton.frame.width + 12)), 30), animated: animated)
+        searchView.change(size: NSMakeSize(state == .Focus || !mode.isPlain ? frame.width - searchView.frame.minX * 2 : (frame.width - (36 + compose.frame.width) - (proxyButton.isHidden ? 0 : proxyButton.frame.width + 12)), 30), animated: animated)
         compose.change(opacity: state == .Focus ? 0 : 1, animated: animated)
         proxyButton.change(opacity: state == .Focus ? 0 : 1, animated: animated)
     }
@@ -290,16 +372,21 @@ class PeerListContainerView : View {
             }
         }
         
-        searchView.setFrameSize(NSMakeSize(searchState == .Focus || mode.isFolder ? frame.width - searchView.frame.minX * 2 : (frame.width - (36 + compose.frame.width) - (proxyButton.isHidden ? 0 : proxyButton.frame.width + 12)), 30))
+        searchContainer.frame = NSMakeRect(0, 0, frame.width, offset)
+
+        
+        searchView.setFrameSize(NSMakeSize(searchState == .Focus || !mode.isPlain ? frame.width - searchView.frame.minX * 2 : (frame.width - (36 + compose.frame.width) - (proxyButton.isHidden ? 0 : proxyButton.frame.width + 12)), 30))
+        
+        
         tableView.setFrameSize(frame.width, frame.height - offset)
         
         searchView.isHidden = frame.width < 200
         if searchView.isHidden {
-            compose.centerX(y: floorToScreenPixels(backingScaleFactor, (49 - compose.frame.height)/2.0))
+            compose.center()
             proxyButton.setFrameOrigin(-proxyButton.frame.width, 0)
         } else {
-            compose.setFrameOrigin(frame.width - 12 - compose.frame.width, floorToScreenPixels(backingScaleFactor, (offset - compose.frame.height)/2.0))
-            proxyButton.setFrameOrigin(frame.width - 12 - compose.frame.width - proxyButton.frame.width - 6, floorToScreenPixels(backingScaleFactor, (offset - proxyButton.frame.height)/2.0))
+            compose.setFrameOrigin(searchContainer.frame.width - 12 - compose.frame.width, floorToScreenPixels(backingScaleFactor, (searchContainer.frame.height - compose.frame.height)/2.0))
+            proxyButton.setFrameOrigin(searchContainer.frame.width - 12 - compose.frame.width - proxyButton.frame.width - 6, floorToScreenPixels(backingScaleFactor, (searchContainer.frame.height - proxyButton.frame.height)/2.0))
         }
         searchView.setFrameOrigin(10, floorToScreenPixels(backingScaleFactor, (offset - searchView.frame.height)/2.0))
         tableView.setFrameOrigin(0, offset)
@@ -318,10 +405,11 @@ class PeerListContainerView : View {
 enum PeerListMode {
     case plain
     case folder(PeerGroupId)
+    case filter(Int32)
     
-    var isFolder:Bool {
+    var isPlain:Bool {
         switch self {
-        case .folder:
+        case .plain:
             return true
         default:
             return false
@@ -333,6 +421,14 @@ enum PeerListMode {
             return groupId
         default:
             return .root
+        }
+    }
+    var filterId: Int32? {
+        switch self {
+        case let .filter(id):
+            return id
+        default:
+            return nil
         }
     }
 }
@@ -370,7 +466,7 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
         self.mode = mode
         self.searchOptions = searchOptions
         super.init(context)
-        self.bar = .init(height: mode.isFolder ? 50 : 0)
+        self.bar = .init(height: !mode.isPlain ? 50 : 0)
     }
     
     override var redirectUserInterfaceCalls: Bool {
@@ -509,8 +605,11 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
                     guard let strongSelf = strongSelf else {return}
                     strongSelf.context.composeCreateChannel()
                 }, theme.icons.composeNewChannel)];
-                
-                showPopover(for: control, with: SPopoverViewController(items: items), edge: .maxY, inset: NSMakePoint(-138,  -(strongSelf.genericView.compose.frame.maxY + 10)))
+                if let popover = control.popover {
+                    popover.hide()
+                } else {
+                    showPopover(for: control, with: SPopoverViewController(items: items), edge: .maxY, inset: NSMakePoint(-138,  -(strongSelf.genericView.compose.frame.maxY + 10)))
+                }
             }
         }, for: .Click)
         
@@ -555,7 +654,7 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
     
     func changeSelection(_ location: ChatLocation?) {
         if let location = location {
-            self.genericView.tableView.changeSelection(stableId: UIChatListEntryId.chatId(location.peerId))
+            self.genericView.tableView.changeSelection(stableId: UIChatListEntryId.chatId(location.peerId, nil))
         } else {
             self.genericView.tableView.changeSelection(stableId: nil)
         }
@@ -563,11 +662,11 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
     
     private func showSearchController(animated: Bool) {
         if searchController == nil {
-            delay(0.1, closure: {
+           // delay(0.15, closure: {
                 let rect = self.genericView.tableView.frame
                 let searchController = SearchController(context: self.context, open:{ [weak self] (peerId, messageId, close) in
                     if let peerId = peerId {
-                        self?.open(with: .chatId(peerId), messageId: messageId, close:close)
+                        self?.open(with: .chatId(peerId, nil), messageId: messageId, close:close)
                     } else {
                         self?.genericView.searchView.cancel(true)
                     }
@@ -576,9 +675,10 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
                 searchController.pinnedItems = self.collectPinnedItems
                 
                 self.searchController = searchController
-                self.genericView.tableView.change(opacity: 0, animated: animated, completion: { [weak self] _ in
-                    self?.genericView.tableView.isHidden = true
-                })
+//                self.genericView.tableView.change(opacity: 0, animated: animated, completion: { [weak self] _ in
+//                    self?.genericView.tableView.isHidden = true
+//                })
+                searchController.defaultQuery = self.genericView.searchView.query
                 searchController.navigationController = self.navigationController
                 searchController.viewWillAppear(true)
                 
@@ -588,13 +688,17 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
                     searchController.view.layer?.animateAlpha(from: 0.0, to: 1.0, duration: 0.25, completion:{ [weak self] complete in
                         if complete {
                             self?.searchController?.viewDidAppear(animated)
+                        //     self?.genericView.tableView.isHidden = true
                         }
                     })
+                    searchController.view.layer?.animateScaleSpring(from: 1.05, to: 1.0, duration: 0.4, bounce: false)
+                    searchController.view.layer?.animatePosition(from: NSMakePoint(rect.minX, rect.minY + 15), to: rect.origin, duration: 0.4, timingFunction: .spring)
+
                 } else {
                     searchController.viewDidAppear(animated)
                 }
                 self.addSubview(searchController.view)
-            })
+           // })
         }
     }
     
@@ -612,6 +716,9 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
             searchController.view._change(opacity: 0, animated: animated, duration: 0.25, timingFunction: CAMediaTimingFunctionName.spring, completion: { [weak view] completed in
                 view?.removeFromSuperview()
             })
+            searchController.view.layer?.animateScaleSpring(from: 1.0, to: 1.05, duration: 0.4, removeOnCompletion: false, bounce: false)
+            genericView.tableView.layer?.animateScaleSpring(from: 0.95, to: 1.00, duration: 0.4, removeOnCompletion: false, bounce: false)
+
         }
     }
     
@@ -663,7 +770,7 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
     func open(with entryId: UIChatListEntryId, messageId:MessageId? = nil, initialAction: ChatInitialAction? = nil, close:Bool = true, addition: Bool = false) ->Void {
         
         switch entryId {
-        case let .chatId(peerId):
+        case let .chatId(peerId, _):
             let navigation = context.sharedContext.bindings.rootNavigation()
             
             if let modalAction = navigation.modalAction as? FWDNavigationAction, peerId == context.peerId {
@@ -677,6 +784,12 @@ class PeersListController: TelegramGenericViewController<PeerListContainerView>,
             }
         case let .groupId(groupId):
             self.navigationController?.push(ChatListController(context, modal: false, groupId: groupId))
+        case .reveal:
+            break
+        case .empty:
+            break
+        case .loading:
+            break
         }
         if close {
             self.genericView.searchView.cancel(true)

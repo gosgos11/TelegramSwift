@@ -7,9 +7,9 @@
 		<key>libphonenumber.xcscheme</key>
 		<dict>
 			<key>isShown</key>
-			<false/>
+			<true/>
 			<key>orderHint</key>
-			<integer>11</integer>
+			<integer>7</integer>
 		</dict>
 	</dict>
 </dict>

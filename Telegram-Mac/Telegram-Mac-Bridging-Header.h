@@ -21,6 +21,7 @@
 #import "BuildConfig.h"
 #import "TGModernGrowingTextView.h"
 
+
 #ifndef SHARE
 #import "ffmpeg/include/libavcodec/avcodec.h"
 #import "ffmpeg/include/libavformat/avformat.h"
@@ -41,13 +42,13 @@
 #import "Svg.h"
 #endif
 
-
+#import "CallBridge.h"
+#import "CalendarUtils.h"
 #import "RingBuffer.h"
 #import "ocr.h"
 #import "TGPassportMRZ.h"
 #import "EDSunriseSet.h"
-
-
+#import "ObjcUtils.h"
 
 
 //#import <ChromiumTabs/ChromiumTabs.h>
@@ -68,78 +69,12 @@
 void stickerThumbnailAlphaBlur(int imageWidth, int imageHeight, int imageStride, void * __nullable pixels);
 void telegramFastBlurMore(int imageWidth, int imageHeight, int imageStride, void * __nullable pixels);
 void telegramFastBlur(int imageWidth, int imageHeight, int imageStride, void * __nullable pixels);
-NSArray<NSString *> * __nonnull cut_long_message(NSString * __nonnull message, int max_length);
 int64_t SystemIdleTime(void);
 NSDictionary<NSString * , NSString *> * __nonnull audioTags(AVURLAsset * __nonnull asset);
 NSImage * __nonnull TGIdenticonImage(NSData * __nonnull data, NSData * __nonnull additionalData, CGSize size);
 
 CGImageRef __nullable convertFromWebP(NSData *__nonnull data);
 
-@interface OpenWithObject : NSObject
-@property (nonatomic, strong,readonly) NSString *fullname;
-@property (nonatomic, strong,readonly) NSURL *app;
-@property (nonatomic, strong,readonly) NSImage *icon;
-
-
--(id)initWithFullname:(NSString *)fullname app:(NSURL *)app icon:(NSImage *)icon;
-
-@end
-
-
-
-@interface ObjcUtils : NSObject
-+ (NSData *)dataFromHexString:(NSString *)string;
-+ (NSArray *)textCheckingResultsForText:(NSString *)text highlightMentionsAndTags:(bool)highlightMentionsAndTags highlightCommands:(bool)highlightCommands dotInMention:(bool)dotInMention;
-+(NSString * __nonnull) md5:(NSString *__nonnull)string;
-+(NSArray<NSView *> *__nonnull)findElementsByClass:(NSString *__nonnull)className inView:(NSView *__nonnull)view;
-+(NSString * __nonnull)stringForEmojiHashOfData:(NSData *__nonnull)data count:(NSInteger)count positionExtractor:(int32_t (^__nonnull)(uint8_t *__nonnull, int32_t, int32_t))positionExtractor;
-+(NSArray<NSNumber *> *)bufferList:(CMSampleBufferRef)sampleBuffer;
-+(NSString * __nonnull)callEmojies:(NSData *__nonnull)keySha256;
-+ (NSArray<NSString *> * __nonnull)getEmojiFromString:(NSString * __nonnull)string;
-+(NSOpenPanel * __nonnull)openPanel;
-+(NSSavePanel * __nonnull)savePanel;
-+(NSEvent * __nonnull)scrollEvent:(NSEvent *__nonnull)from;
-+(NSSize)gifDimensionSize:(NSString * __nonnull)path;
-+(int)colorMask:(int)idValue mainId:(int)mainId;
-+(NSArray<NSString *> * __nonnull)notificationTones:(NSString * __nonnull)def;
-+(NSString * __nullable)youtubeIdentifier:(NSString * __nonnull)url;;
-+ (NSString * __nullable)_youtubeVideoIdFromText:(NSString * __nullable)text originalUrl:(NSString * __nullable)originalUrl startTime:(NSTimeInterval *)startTime;
-+(NSArray<OpenWithObject *> *)appsForFileUrl:(NSString *)fileUrl;
-
-@end
-
-int colorIndexForGroupId(int64_t groupId);
-int64_t TGPeerIdFromChannelId(int32_t channelId);
-int colorIndexForUid(int32_t uid, int32_t myUserId);
-
-NSArray<NSString *> * __nonnull currentAppInputSource();
-
-@interface NSData (TG)
-- (NSString *__nonnull)stringByEncodingInHex;
-@end
-
-
-@interface NSFileManager (Extension)
-+ (NSString * __nonnull)xattrStringValueForKey:(NSString *__nonnull)key atURL:(NSURL *__nonnull)URL;
-+ (BOOL)setXAttrStringValue:(NSString *__nonnull)value forKey:(NSString *__nonnull)key atURL:(NSURL *__nonnull)URL;
-@end
-
-@interface NSMutableAttributedString(Extension)
--(void)detectBoldColorInStringWithFont:(NSFont *__nonnull)font;
-@end
-
-@interface CalendarUtils : NSObject
-
-+ (BOOL) isSameDate:(NSDate*__nonnull)d1 date:(NSDate* __nonnull)d2 checkDay:(BOOL)checkDay;
-+ (NSString*__nonnull) dd:(NSDate*__nonnull)d;
-+ (NSInteger) colForDay:(NSInteger)day;
-+ (NSInteger) lastDayOfTheMonth:(NSDate *__nonnull)date;
-+ (NSDate*__nonnull) toUTC:(NSDate*__nonnull)d;
-+ (NSDate*__nonnull) monthDay:(NSInteger)day date:(NSDate *__nonnull)date;
-+ (NSInteger)weekDay:(NSDate *__nonnull)date;
-+ (NSDate *__nonnull) stepMonth:(NSInteger)dm date:(NSDate *__nonnull)date;
-
-@end
 
 
 
@@ -433,64 +368,6 @@ BOOL isEnterEventObjc(NSEvent *theEvent);
 @end
 
 
-
-@interface TGCallConnectionDescription : NSObject
-    
-    @property (nonatomic, readonly) int64_t identifier;
-    @property (nonatomic, strong, readonly) NSString *ipv4;
-    @property (nonatomic, strong, readonly) NSString *ipv6;
-    @property (nonatomic, readonly) int32_t port;
-    @property (nonatomic, strong, readonly) NSData *peerTag;
-    
-- (instancetype)initWithIdentifier:(int64_t)identifier ipv4:(NSString *)ipv4 ipv6:(NSString *)ipv6 port:(int32_t)port peerTag:(NSData *)peerTag;
-    
-@end
-
-
-@interface TGCallConnection : NSObject
-
-@property (nonatomic, strong, readonly) NSData *key;
-@property (nonatomic, strong, readonly) NSData *keyHash;
-@property (nonatomic, strong, readonly) TGCallConnectionDescription *defaultConnection;
-@property (nonatomic, strong, readonly) NSArray<TGCallConnectionDescription *> *alternativeConnections;
-@property (nonatomic, readonly) int32_t maxLayer;
-- (instancetype)initWithKey:(NSData *)key keyHash:(NSData *)keyHash defaultConnection:(TGCallConnectionDescription *)defaultConnection alternativeConnections:(NSArray<TGCallConnectionDescription *> *)alternativeConnections maxLayer:(int32_t)maxLayer;
-
-@end
-
-@interface AudioDevice : NSObject
-@property(nonatomic, strong, readonly) NSString *_Nullable deviceId;
-@property(nonatomic, strong, readonly) NSString *deviceName;
--(id)initWithDeviceId:(NSString*)deviceId deviceName:(NSString *)deviceName;
-@end
-
-@interface CProxy : NSObject
-@property(nonatomic, strong, readonly) NSString *host;
-@property(nonatomic, assign, readonly) int32_t port;
-@property(nonatomic, strong, readonly) NSString *_Nullable user;
-@property(nonatomic, strong, readonly) NSString *_Nullable pass;
--(id)initWithHost:(NSString*)host port:(int32_t)port user:(NSString *_Nullable )user pass:(NSString * _Nullable)pass;
-@end
-
-@interface CallBridge : NSObject
-
--(id)initWithProxy:(CProxy * _Nullable)proxy;
-
--(void)startTransmissionIfNeeded:(bool)outgoing allowP2p:(bool)allowP2p serializedData:(NSString *)serializedData connection:(TGCallConnection *)connection;
--(void)mute;
--(void)unmute;
--(BOOL)isMuted;
-+(int32_t)voipMaxLayer;
--(NSString *)currentOutputDeviceId;
--(NSString *)currentInputDeviceId;
-+(NSArray<AudioDevice *> *)outputDevices;
-+(NSArray<AudioDevice *> *)inputDevices;
--(void)setCurrentOutputDeviceId:(NSString *)deviceId;
--(void)setCurrentInputDeviceId:(NSString *)deviceId;
--(void)setMutedOtherSounds:(BOOL)mute;
-@property (nonatomic, copy) void (^stateChangeHandler)(int);
-
-@end
 
 @interface TGCurrencyFormatterEntry : NSObject
 

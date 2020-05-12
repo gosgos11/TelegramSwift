@@ -19,6 +19,9 @@ class GeneralInteractedRowView: GeneralRowView {
     private(set) var descriptionView: TextView?
     private var nextView:ImageView = ImageView()
     
+    
+    
+    
     override func set(item:TableRowItem, animated:Bool = false) {
         
         
@@ -52,6 +55,7 @@ class GeneralInteractedRowView: GeneralRowView {
                 
                 switchView?.stateChanged = item.action
                 switchView?.userInteractionEnabled = item.enabled
+                switchView?.isEnabled = item.enabled
             } else {
                 switchView?.removeFromSuperview()
                 switchView = nil
@@ -111,7 +115,7 @@ class GeneralInteractedRowView: GeneralRowView {
             case .legacy:
                 containerView.setCorners([], animated: false)
             case .modern:
-                containerView.setCorners(item.viewType.corners, animated: animated)
+                containerView.setCorners(self.isResorting ? GeneralViewItemCorners.all : item.viewType.corners, animated: animated)
             }
             
             switch item.type {
@@ -132,6 +136,12 @@ class GeneralInteractedRowView: GeneralRowView {
         
         containerView.needsLayout = true
         containerView.needsDisplay = true
+    }
+    
+    override func updateIsResorting() {
+        if let item = self.item {
+            self.set(item: item, animated: true)
+        }
     }
     
     override var backdorColor: NSColor {
@@ -186,7 +196,7 @@ class GeneralInteractedRowView: GeneralRowView {
                     ctx.draw(icon, in: NSMakeRect(item.inset.left, f.minY, f.width, f.height))
                 }
                 
-                if item.drawCustomSeparator, !isSelect {
+                if item.drawCustomSeparator, !isSelect && !self.isResorting {
                     ctx.setFillColor(theme.colors.border.cgColor)
                     ctx.fill(NSMakeRect(textXAdditional + item.inset.left, frame.height - .borderSize, frame.width - (item.inset.left + item.inset.right + textXAdditional), .borderSize))
                 }
@@ -194,7 +204,7 @@ class GeneralInteractedRowView: GeneralRowView {
                 if let nameLayout = (item.isSelected ? item.nameLayoutSelected : item.nameLayout) {
                     var textRect = focus(NSMakeSize(nameLayout.0.size.width,nameLayout.0.size.height))
                     textRect.origin.x = item.inset.left + textXAdditional
-                    textRect.origin.y -= 1
+                    textRect.origin.y -= 2
                     if item.descLayout != nil {
                         textRect.origin.y = 10
                     }
@@ -216,7 +226,7 @@ class GeneralInteractedRowView: GeneralRowView {
                     ctx.draw(icon, in: NSMakeRect(insets.left + (thumb.thumbInset ?? 0), f.minY, f.width, f.height))
                 }
                 
-                if position.border, !isSelect  {
+                if position.border, !isSelect && !self.isResorting  {
                     ctx.setFillColor(theme.colors.border.cgColor)
                     ctx.fill(NSMakeRect(textXAdditional + insets.left, containerView.frame.height - .borderSize, containerView.frame.width - (insets.left + insets.right + textXAdditional), .borderSize))
                 }
@@ -224,7 +234,7 @@ class GeneralInteractedRowView: GeneralRowView {
                 if let nameLayout = (item.isSelected ? item.nameLayoutSelected : item.nameLayout) {
                     var textRect = focus(NSMakeSize(nameLayout.0.size.width,nameLayout.0.size.height))
                     textRect.origin.x = insets.left + textXAdditional
-                    textRect.origin.y = insets.top
+                    textRect.origin.y = insets.top - 1
                     
                     nameLayout.1.draw(textRect, in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
                 }
@@ -250,6 +260,7 @@ class GeneralInteractedRowView: GeneralRowView {
         self.containerView.displayDelegate = self
         self.addSubview(self.containerView)
         
+        
         containerView.set(handler: { [weak self] _ in
             self?.updateColors()
         }, for: .Highlight)
@@ -261,40 +272,64 @@ class GeneralInteractedRowView: GeneralRowView {
         }, for: .Hover)
         
         containerView.set(handler: { [weak self] _ in
-            if let `self` = self, let item = self.item as? GeneralInteractedRowItem {
-                if item.enabled {
-                    if let textView = self.textView {
-                        switch item.type {
-                        case let .contextSelector(_, items):
-                            showPopover(for: textView, with: SPopoverViewController(items: items), edge: .minX, inset: NSMakePoint(0,-30))
-                            return
-                        default:
-                            break
-                        }
-                    }
-                    
-                    switch item.type {
-                    case let .switchable(enabled):
-                        if item.autoswitch {
-                            item.type = .switchable(!enabled)
-                            self.switchView?.send(event: .Click)
-                            return
-                        }
-                    default:
-                        break
-                    }
-                    item.action()
-                } else {
-                    item.disabledAction()
-                }
-            }
-        }, for: .Click)
+            self?.invokeIfNeededDown()
+        }, for: .Down)
+        
+        containerView.set(handler: { [weak self] _ in
+            self?.invokeIfNeededUp()
+        }, for: .Up)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
+    func invokeAction(_ item: GeneralInteractedRowItem) {
+        if item.enabled {
+            if let textView = self.textView {
+                switch item.type {
+                case let .contextSelector(_, items):
+                    showPopover(for: textView, with: SPopoverViewController(items: items), edge: .minX, inset: NSMakePoint(0,-30))
+                    return
+                default:
+                    break
+                }
+            }
+            
+            switch item.type {
+            case let .switchable(enabled):
+                if item.autoswitch {
+                    item.type = .switchable(!enabled)
+                    self.switchView?.send(event: .Click)
+                    return
+                }
+            default:
+                break
+            }
+            item.action()
+        } else {
+            item.disabledAction()
+        }
+    }
+    private func invokeIfNeededUp() {
+        if let event = NSApp.currentEvent {
+            if let item = item as? GeneralInteractedRowItem, let table = item.table, table.alwaysOpenRowsOnMouseUp, containerView.mouseInside() {
+                invokeAction(item)
+            } else {
+                super.mouseUp(with: event)
+            }
+        }
+        
+    }
+    private func invokeIfNeededDown() {
+        if let event = NSApp.currentEvent {
+            if let item = item as? GeneralInteractedRowItem, let table = item.table, !table.alwaysOpenRowsOnMouseUp, containerView.mouseInside() {
+                invokeAction(item)
+            } else {
+                super.mouseDown(with: event)
+            }
+        }
+    }
     
     
     override func layout() {
@@ -313,7 +348,7 @@ class GeneralInteractedRowView: GeneralRowView {
                 let nextInset = nextView.isHidden ? 0 : nextView.frame.width + 6 + (insets.right == 0 ? 10 : 0)
                 
                 if let switchView = switchView {
-                    switchView.centerY(x:frame.width - insets.right - switchView.frame.width - nextInset)
+                    switchView.centerY(x:frame.width - insets.right - switchView.frame.width - nextInset, addition: -1)
                 }
                 if let textView = textView {
                     var width:CGFloat = 100
@@ -322,25 +357,25 @@ class GeneralInteractedRowView: GeneralRowView {
                     }
                     textView.layout?.measure(width: width)
                     textView.update(textView.layout)
-                    textView.centerY(x:frame.width - insets.right - textView.frame.width - nextInset)
+                    textView.centerY(x:frame.width - insets.right - textView.frame.width - nextInset, addition: -1)
                     if !nextView.isHidden {
                         textView.setFrameOrigin(textView.frame.minX,textView.frame.minY - 1)
                     }
                 }
                 nextView.centerY(x: frame.width - (insets.right == 0 ? 10 : insets.right) - nextView.frame.width)
                 if let progressView = progressView {
-                    progressView.centerY(x: frame.width - (insets.right == 0 ? 10 : insets.right) - progressView.frame.width)
+                    progressView.centerY(x: frame.width - (insets.right == 0 ? 10 : insets.right) - progressView.frame.width, addition: -1)
                 }
             case let .modern(_, innerInsets):
                 self.containerView.frame = NSMakeRect(floorToScreenPixels(backingScaleFactor, (frame.width - item.blockWidth) / 2), insets.top, item.blockWidth, frame.height - insets.bottom - insets.top)
-                self.containerView.setCorners(item.viewType.corners)
+                self.containerView.setCorners(self.isResorting ? GeneralViewItemCorners.all : item.viewType.corners)
                 if let descriptionView = self.descriptionView {
                     descriptionView.setFrameOrigin(innerInsets.left + textXAdditional, containerView.frame.height - descriptionView.frame.height - innerInsets.bottom)
                 }
                 let nextInset = nextView.isHidden ? 0 : nextView.frame.width + 6
                 
                 if let switchView = switchView {
-                    switchView.centerY(x: containerView.frame.width - innerInsets.right - switchView.frame.width - nextInset)
+                    switchView.centerY(x: containerView.frame.width - innerInsets.right - switchView.frame.width - nextInset, addition: -1)
                 }
                 if let textView = textView {
                     var width:CGFloat = 100
@@ -354,9 +389,9 @@ class GeneralInteractedRowView: GeneralRowView {
                         textView.setFrameOrigin(textView.frame.minX, textView.frame.minY - 1)
                     }
                 }
-                nextView.centerY(x: containerView.frame.width - innerInsets.right - nextView.frame.width)
+                nextView.centerY(x: containerView.frame.width - innerInsets.right - nextView.frame.width, addition: -1)
                 if let progressView = progressView {
-                    progressView.centerY(x: containerView.frame.width - innerInsets.right - progressView.frame.width)
+                    progressView.centerY(x: containerView.frame.width - innerInsets.right - progressView.frame.width, addition: -1)
                 }
             }
         }

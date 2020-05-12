@@ -89,7 +89,7 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
     
     
     required init(frame frameRect: NSRect, shareObject: ShareObject) {
-        tokenizedView = TokenizedView(frame: NSMakeRect(0, 0, 260, 30), localizationFunc: { key in
+        tokenizedView = TokenizedView(frame: NSMakeRect(0, 0, 300, 30), localizationFunc: { key in
             return translate(key: key, [])
         }, placeholderKey: shareObject.searchPlaceholderKey)
         super.init(frame: frameRect)
@@ -97,6 +97,7 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
         backgroundColor = theme.colors.background
         textContainerView.backgroundColor = theme.colors.background
         actionsContainerView.backgroundColor = theme.colors.background
+        textView.setBackgroundColor(theme.colors.background)
         
         addSubview(tokenizedView)
         addSubview(basicSearchView)
@@ -175,11 +176,27 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
         }
     }
     
+    var hasCommentView: Bool = true {
+        didSet {
+            textContainerView.isHidden = !hasCommentView
+            bottomSeparator.isHidden = !hasCommentView
+            actionsContainerView.isHidden = !hasCommentView
+            needsLayout = true
+        }
+    }
+    
+    var hasSendView: Bool = true {
+        didSet {
+            sendButton.isHidden = !hasSendView
+            needsLayout = true
+        }
+    }
+    
     
     
     func tokenizedViewDidChangedHeight(_ view: TokenizedView, height: CGFloat, animated: Bool) {
         searchView._change(pos: NSMakePoint(50, 10), animated: animated)
-        tableView.change(size: NSMakeSize(frame.width, frame.height - height - 20 - textView.frame.height - 16), animated: animated)
+        tableView.change(size: NSMakeSize(frame.width, frame.height - height - 20 - (textContainerView.isHidden ? 0 : textContainerView.frame.height)), animated: animated)
         tableView.change(pos: NSMakePoint(0, height + 20), animated: animated)
         topSeparator.change(pos: NSMakePoint(0, searchView.frame.maxY + 10), animated: animated)
     }
@@ -189,7 +206,7 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
         textContainerView.change(size: NSMakeSize(frame.width, height + 16), animated: animated)
         textContainerView.change(pos: NSMakePoint(0, frame.height - textContainerView.frame.height), animated: animated)
         textView._change(pos: NSMakePoint(10, height == 34 ? 8 : 11), animated: animated)
-        tableView.change(size: NSMakeSize(frame.width, frame.height - searchView.frame.height - 20 - (hasCaptionView ? 50 : 0)), animated: animated)
+        tableView.change(size: NSMakeSize(frame.width, frame.height - searchView.frame.height - 20 - (!textContainerView.isHidden ? 50 : 0)), animated: animated)
 
         actionsContainerView.change(pos: NSMakePoint(frame.width - actionsContainerView.frame.width, frame.height - actionsContainerView.frame.height), animated: animated)
         
@@ -206,11 +223,17 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
     
     fileprivate override func layout() {
         super.layout()
+        
+        emojiButton.centerY(x: 0)
+        actionsContainerView.setFrameSize((sendButton.isHidden ? 0 : (sendButton.frame.width + 20)) + emojiButton.frame.width + 20, 50)
+
+        sendButton.centerY(x: emojiButton.frame.maxX + 20)
+        
         searchView.setFrameSize(frame.width - 10 - (!dismiss.isHidden ? 40 : 0) - (share.isHidden ? 10 : 50), searchView.frame.height)
         share.setFrameOrigin(frame.width - share.frame.width - 10, 10)
         dismiss.setFrameOrigin(10, 10)
         searchView.setFrameOrigin(10 + (!dismiss.isHidden ? 40 : 0), 10)
-        tableView.frame = NSMakeRect(0, searchView.frame.maxY + 10, frame.width, frame.height - searchView.frame.height - 20 - (hasCaptionView ? 50 : 0))
+        tableView.frame = NSMakeRect(0, searchView.frame.maxY + 10, frame.width, frame.height - searchView.frame.height - 20 - (!textContainerView.isHidden ? 50 : 0))
         topSeparator.frame = NSMakeRect(0, searchView.frame.maxY + 10, frame.width, .borderSize)
         actionsContainerView.setFrameOrigin(frame.width - actionsContainerView.frame.width, frame.height - actionsContainerView.frame.height)
         
@@ -235,26 +258,68 @@ fileprivate class ShareModalView : View, TokenizedProtocol {
     
 }
 
+final class ShareAdditionItem {
+    let peer: Peer
+    let status: String?
+    init(peer: Peer, status: String?) {
+        self.peer = peer
+        self.status = status
+    }
+}
+
+final class ShareAdditionItems {
+    let items: [ShareAdditionItem]
+    let topSeparator: String
+    let bottomSeparator: String
+    init(items: [ShareAdditionItem], topSeparator: String, bottomSeparator: String) {
+        self.items = items
+        self.topSeparator = topSeparator
+        self.bottomSeparator = bottomSeparator
+    }
+}
+
 
 class ShareObject {
+    
+    let additionTopItems:ShareAdditionItems?
+    
     let context: AccountContext
     let emptyPerformOnClose: Bool
-    init(_ context:AccountContext, emptyPerformOnClose: Bool = false) {
+    let excludePeerIds: Set<PeerId>
+    let defaultSelectedIds:Set<PeerId>
+    let limit: Int?
+    init(_ context:AccountContext, emptyPerformOnClose: Bool = false, excludePeerIds:Set<PeerId> = [], defaultSelectedIds: Set<PeerId> = [], additionTopItems:ShareAdditionItems? = nil, limit: Int? = nil) {
+        self.limit = limit
         self.context = context
         self.emptyPerformOnClose = emptyPerformOnClose
+        self.excludePeerIds = excludePeerIds
+        self.additionTopItems = additionTopItems
+        self.defaultSelectedIds = defaultSelectedIds
     }
     
     var multipleSelection: Bool {
         return true
+    }
+    var hasCaptionView: Bool {
+        return true
+    }
+    var interactionOk: String {
+        return L10n.modalOK
     }
     
     var searchPlaceholderKey: String {
         return "ShareModal.Search.Placeholder"
     }
 
+    var alwaysEnableDone: Bool {
+        return false
+    }
     
     func perform(to entries:[PeerId], comment: String? = nil) -> Signal<Never, String> {
         return .complete()
+    }
+    func limitReached() {
+        
     }
     
     var hasLink: Bool {
@@ -266,8 +331,10 @@ class ShareObject {
     }
     
     func possibilityPerformTo(_ peer:Peer) -> Bool {
-        return peer.canSendMessage
+        return peer.canSendMessage && !self.excludePeerIds.contains(peer.id)
     }
+    
+    
 }
 
 class ShareLinkObject : ShareObject {
@@ -330,6 +397,9 @@ class ShareCallbackObject : ShareObject {
     }
     
 }
+
+
+
 
 class ShareMessageObject : ShareObject {
     fileprivate let messageIds:[MessageId]
@@ -575,7 +645,7 @@ fileprivate func prepareEntries(from:[SelectablePeersEntry]?, to:[SelectablePeer
         
         switch entry {
         case let .plain(peer, _, presence, drawSeparator):
-            let color = presence?.status.attribute(NSAttributedString.Key.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+            let color = presence?.status.string.isEmpty == false ? presence?.status.attribute(NSAttributedString.Key.foregroundColor, at: 0, effectiveRange: nil) as? NSColor : nil
             return  ShortPeerRowItem(initialSize, peer: peer, account:account, stableId: entry.stableId, height: 48, photoSize:NSMakeSize(36, 36), statusStyle: ControlStyle(font: .normal(.text), foregroundColor: peer.id == account.peerId ? theme.colors.grayText : color ?? theme.colors.grayText, highlightColor:.white), status: peer.id == account.peerId ? (multipleSelection ? nil : L10n.forwardToSavedMessages) : presence?.status.string, drawCustomSeparator: drawSeparator, isLookSavedMessage : peer.id == account.peerId, inset:NSEdgeInsets(left: 10, right: 10), drawSeparatorIgnoringInset: true, interactionType: multipleSelection ? .selectable(selectInteraction) : .plain, action: {
                selectInteraction.action(peer.id)
             })
@@ -616,14 +686,38 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
             let added = value.selected.subtracting(oldValue.selected)
             let removed = oldValue.selected.subtracting(value.selected)
 
-            for item in added {
-                let title = item == share.context.account.peerId ? L10n.peerSavedMessages : value.peers[item]?.compactDisplayTitle ?? tr(L10n.peerDeletedUser)
-                genericView.tokenizedView.addToken(token: SearchToken(name: title, uniqueId: item.toInt64()), animated: animated)
+            
+            let selected = value.selected.filter {
+                $0.namespace != ChatListFilterPeerCategories.Namespace
             }
             
-            for item in removed {
-                genericView.tokenizedView.removeToken(uniqueId: item.toInt64(), animated: animated)
+            if let limit = self.share.limit, selected.count > limit {
+                DispatchQueue.main.async { [unowned self] in
+                    self.selectInteractions.update(animated: true, { current in
+                        var current = current
+                        for peerId in added {
+                            if let peer = current.peers[peerId] {
+                                current = current.withToggledSelected(peerId, peer: peer)
+                            }
+                        }
+                        return current
+                    })
+                    self.share.limitReached()
+                }
+                return
             }
+            
+            let tokens:[SearchToken] = added.map { item in
+                let title = item == share.context.account.peerId ? L10n.peerSavedMessages : value.peers[item]?.compactDisplayTitle ?? L10n.peerDeletedUser
+                return SearchToken(name: title, uniqueId: item.toInt64())
+            }
+            genericView.tokenizedView.addTokens(tokens: tokens, animated: animated)
+            
+            let idsToRemove:[Int64] = removed.map {
+                $0.toInt64()
+            }
+            genericView.tokenizedView.removeTokens(uniqueIds: idsToRemove, animated: animated)
+            self.modal?.interactions?.updateEnables(!value.selected.isEmpty || share.alwaysEnableDone)
             
         }
     }
@@ -788,7 +882,8 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
         genericView.textView.delegate = self
         genericView.hasShareMenu = self.share.hasLink
         genericView.hasCaptionView = self.share.multipleSelection
-
+        genericView.hasCommentView = self.share.hasCaptionView
+        genericView.hasSendView = self.share.multipleSelection
         if self.share.multipleSelection {
             search.set(combineLatest(genericView.tokenizedView.textUpdater, genericView.tokenizedView.stateValue.get()) |> map { SearchState(state: $1, request: $0)})
         } else {
@@ -804,6 +899,9 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
         let request = Promise<ChatListIndexRequest>()
         let context = self.share.context
         let selectInteraction = self.selectInteractions
+        
+     
+        
         let share = self.share
         selectInteraction.add(observer: self)
         let previous:Atomic<[SelectablePeersEntry]?> = Atomic(value: nil)
@@ -849,6 +947,25 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
 
         let multipleSelection = self.share.multipleSelection
         
+        
+        let defaultItems = context.account.postbox.transaction { transaction -> [Peer] in
+            var peers:[Peer] = []
+            
+            if let addition = share.additionTopItems {
+                for item in addition.items {
+                    if share.defaultSelectedIds.contains(item.peer.id) {
+                        peers.append(item.peer)
+                    }
+                }
+            }
+           
+            for peerId in share.defaultSelectedIds  {
+                if let peer = transaction.getPeer(peerId) {
+                    peers.append(peer)
+                }
+            }
+            return peers
+        }
         
         let list:Signal<TableUpdateTransition, NoError> = combineLatest(request.get() |> distinctUntilChanged |> deliverOnPrepareQueue, search.get() |> distinctUntilChanged |> deliverOnPrepareQueue) |> mapToSignal { location, query -> Signal<TableUpdateTransition, NoError> in
             
@@ -922,18 +1039,19 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
                 } else {
                     var signal:Signal<(ChatListView,ViewUpdateType), NoError>
                     
+                    
                     switch(location) {
                     case let .Initial(count, _):
-                        signal = context.account.viewTracker.tailChatListView(groupId: .root, count: count)
+                        signal = context.account.viewTracker.tailChatListView(groupId: .root, filterPredicate: nil, count: count)
                     case let .Index(index, _):
-                        signal = context.account.viewTracker.aroundChatListView(groupId: .root, index: index, count: 30)
+                        signal = context.account.viewTracker.aroundChatListView(groupId: .root, filterPredicate: nil, index: index, count: 30)
                     }
                     
                     return signal |> deliverOnPrepareQueue |> mapToSignal { value -> Signal<(ChatListView,ViewUpdateType, [PeerId: PeerStatusStringResult], Peer), NoError> in
                         var peerIds:[PeerId] = []
                         for entry in value.0.entries {
                             switch entry {
-                            case let .MessageEntry(_, _, _, _, _, renderedPeer, _, _, _):
+                            case let .MessageEntry(_, _, _, _, _, renderedPeer, _, _, _, _):
                                 peerIds.append(renderedPeer.peerId)
                             default:
                                 break
@@ -959,13 +1077,37 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
                         
                         var contains:[PeerId:PeerId] = [:]
                         
+                        var offset: Int32 = Int32.max
                         
-                        entries.append(.plain(value.3, ChatListIndex(pinningIndex: 0, messageIndex: MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: Int32.max), timestamp: Int32.max)), nil, true))
-                        contains[value.3.id] = value.3.id
+                        if let additionTopItems = share.additionTopItems {
+                            var index = ChatListIndex(pinningIndex: 0, messageIndex: MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: offset), timestamp: offset))
+                            entries.append(.separator(additionTopItems.topSeparator, index))
+                            offset -= 1
+                            
+                            
+                            for item in additionTopItems.items {
+                                index = ChatListIndex(pinningIndex: 0, messageIndex: MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: offset), timestamp: offset))
+                                let theme = PeerStatusStringTheme()
+                                
+                                let status = NSAttributedString.initialize(string: item.status, color: theme.statusColor, font: theme.statusFont)
+                                let title = NSAttributedString.initialize(string: item.peer.displayTitle, color: theme.titleColor, font: theme.titleFont)
+                                entries.append(.plain(item.peer, index, PeerStatusStringResult(title, status), true))
+                                offset -= 1
+                            }
+                            
+                            index = ChatListIndex(pinningIndex: 0, messageIndex: MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: offset), timestamp: offset))
+                            entries.append(.separator(additionTopItems.bottomSeparator, index))
+                            offset -= 1
+                        }
+                        
+                        if !share.excludePeerIds.contains(value.3.id) {
+                            entries.append(.plain(value.3, ChatListIndex(pinningIndex: 0, messageIndex: MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: offset), timestamp: offset)), nil, true))
+                            contains[value.3.id] = value.3.id
+                        }
                         
                         for entry in value.0.entries {
                             switch entry {
-                            case let .MessageEntry(id, _, _, _, _, renderedPeer, _, _, _):
+                            case let .MessageEntry(id, _, _, _, _, renderedPeer, _, _, _, _):
                                 if let main = renderedPeer.peer {
                                     if contains[main.id] == nil {
                                         if share.possibilityPerformTo(main) {
@@ -996,7 +1138,16 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
                 
                 _ = previousChatList.swap(nil)
                 
-                let localPeers = context.account.postbox.searchPeers(query: query.request.lowercased())
+                var all = query.request.transformKeyboard
+                all.insert(query.request.lowercased(), at: 0)
+                all = all.uniqueElements
+                let localPeers = combineLatest(all.map {
+                    return context.account.postbox.searchPeers(query: $0)
+                }) |> map { result in
+                    return result.reduce([], {
+                        return $0 + $1
+                    })
+                }
                 
                 let remotePeers = Signal<[RenderedPeer], NoError>.single([]) |> then( searchPeers(account: context.account, query: query.request.lowercased()) |> map { $0.0.map {RenderedPeer($0)} + $0.1.map {RenderedPeer($0)} } )
                 
@@ -1018,7 +1169,7 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
                         var entries:[SelectablePeersEntry] = []
                         var contains:[PeerId:PeerId] = [:]
                         var i:Int32 = Int32.max
-                        if L10n.peerSavedMessages.lowercased().hasPrefix(query.request.lowercased()) || NSLocalizedString("Peer.SavedMessages", comment: "nil").lowercased().hasPrefix(query.request.lowercased()) || values.0.contains(where: {$0.peerId == context.peerId}) {
+                        if L10n.peerSavedMessages.lowercased().hasPrefix(query.request.lowercased()) || NSLocalizedString("Peer.SavedMessages", comment: "nil").lowercased().hasPrefix(query.request.lowercased()) || values.0.contains(where: {$0.peerId == context.peerId}), !share.excludePeerIds.contains(values.2.id) {
                             let index = MessageIndex(id: MessageId(peerId: PeerId(0), namespace: 0, id: i), timestamp: i)
                             entries.append(.plain(values.2, ChatListIndex(pinningIndex: 0, messageIndex: index), nil, true))
                             i -= 1
@@ -1056,15 +1207,27 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
             }
         } |> deliverOnMainQueue
         
-        disposable.set(list.start(next: { [weak self] transition in
+        let signal:Signal<TableUpdateTransition, NoError> = defaultItems |> deliverOnMainQueue |> mapToSignal { [weak self] defaultSelected in
+            
+            self?.selectInteractions.update(animated: false, { value in
+                var value = value
+                for peer in defaultSelected {
+                    value = value.withToggledSelected(peer.id, peer: peer)
+                }
+                return value
+            })
+            
+            return list
+        } |> deliverOnMainQueue
+        
+        disposable.set(signal.start(next: { [weak self] transition in
             self?.genericView.tableView.resetScrollNotifies()
             self?.genericView.tableView.scroll(to: .up(false))
-            self?.genericView.tableView.merge(with:transition)
-            
-            
+            self?.genericView.tableView.merge(with: transition)
             self?.genericView.tableView.cancelHighlight()
-            
+        
             self?.readyOnce()
+            
         }))
         
         
@@ -1126,7 +1289,7 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
             }
             return .invoked
         }
-        if !selectInteractions.presentation.peers.isEmpty {
+        if !selectInteractions.presentation.peers.isEmpty || share.alwaysEnableDone {
             
             let ids = selectInteractions.presentation.selected
 
@@ -1300,6 +1463,16 @@ class ShareModalController: ModalViewController, Notifable, TGModernGrowingDeleg
     private func updateSize(_ width: CGFloat, animated: Bool) {
         if let contentSize = self.window?.contentView?.frame.size {
             self.modal?.resize(with:NSMakeSize(width, min(contentSize.height - 100, genericView.tableView.listHeight + max(genericView.additionHeight, 88))), animated: animated)
+        }
+    }
+    
+    override var modalInteractions: ModalInteractions? {
+        if !share.hasCaptionView {
+            return ModalInteractions(acceptTitle: share.interactionOk, accept: { [weak self] in
+                _ = self?.invoke()
+            }, drawBorder: true, height: 50, singleButton: true)
+        } else {
+            return nil
         }
     }
     

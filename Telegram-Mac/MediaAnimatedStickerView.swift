@@ -19,8 +19,8 @@ class MediaAnimatedStickerView: ChatMediaContentView {
 
     private let loadResourceDisposable = MetaDisposable()
     private let stateDisposable = MetaDisposable()
-    private let playThrottleDisposable = MetaDisposable()
     private let fetchDisposable = MetaDisposable()
+    private let playThrottleDisposable = MetaDisposable()
     private let playerView: LottiePlayerView = LottiePlayerView(frame: NSMakeRect(0, 0, 240, 240))
     private let thumbView = TransformImageView()
     private var sticker:LottieAnimation? = nil {
@@ -91,7 +91,7 @@ class MediaAnimatedStickerView: ChatMediaContentView {
                 break
             }
         }
-        
+       
         if previousAccept != accept {
             self.playThrottleDisposable.set(signal.start(next: { [weak self] in
                 guard let `self` = self else {
@@ -221,8 +221,8 @@ class MediaAnimatedStickerView: ChatMediaContentView {
                 let parameters = parameters as? ChatAnimatedStickerMediaLayoutParameters
                 let playPolicy: LottiePlayPolicy = parameters?.playPolicy ?? (file.isEmojiAnimatedSticker || !self.chatLoopAnimated ? (self.parameters == nil ? .framesCount(1) : .once) : .loop)
                                 
-                let maximumFps: Int = size.width < 200 && !file.isEmojiAnimatedSticker ? 30 : 60
-                let cache: ASCachePurpose = parameters?.cache ?? (size.width < 200 ? .temporaryLZ4(.thumb) : self.parent != nil ? .temporaryLZ4(.chat) : .none)
+                let maximumFps: Int = size.width < 200 && !file.isEmojiAnimatedSticker ? size.width <= 30 ? 24 : 30 : 60
+                let cache: ASCachePurpose = parameters?.cache ?? (size.width < 200 && size.width > 30 ? .temporaryLZ4(.thumb) : self.parent != nil ? .temporaryLZ4(.chat) : .none)
                 let fitzModifier = file.animatedEmojiFitzModifier
                 self.sticker = LottieAnimation(compressed: data, key: LottieAnimationEntryKey(key: .media(file.id), size: size, fitzModifier: fitzModifier), cachePurpose: cache, playPolicy: playPolicy, maximumFps: maximumFps, postbox: self.context?.account.postbox)
                 self.fetchStatus = .Local

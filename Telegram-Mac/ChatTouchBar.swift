@@ -172,7 +172,7 @@ class ChatTouchBar: NSTouchBar, NSTouchBarDelegate, Notifable {
     private let loadStickersDisposable = MetaDisposable()
     private let loadRecentEmojiDisposable = MetaDisposable()
 
-    private weak var chatInteraction: ChatInteraction?
+    private var chatInteraction: ChatInteraction?
     private var textView: NSTextView
     private let candidateListItem = NSCandidateListTouchBarItem<AnyObject>(identifier: .candidateList)
     private let layoutStateDisposable = MetaDisposable()
@@ -195,11 +195,12 @@ class ChatTouchBar: NSTouchBar, NSTouchBarDelegate, Notifable {
     
     func updateChatInteraction(_ chatInteraction: ChatInteraction, textView: NSTextView) -> Void {
         self.chatInteraction?.remove(observer: self)
+        prevIsKeyWindow = nil
         chatInteraction.add(observer: self)
         self.chatInteraction = chatInteraction
-        
         textView.updateTouchBarItemIdentifiers()
         self.textView = textView
+       // self.notify(with: chatInteraction.presentation, oldValue: chatInteraction.presentation, animated: false)
     }
     
     func updateByKeyWindow() {
@@ -218,15 +219,19 @@ class ChatTouchBar: NSTouchBar, NSTouchBarDelegate, Notifable {
         loadStickersDisposable.dispose()
         layoutStateDisposable.dispose()
     }
+    private var prevIsKeyWindow: Bool? = nil
     
     func notify(with value: Any, oldValue: Any, animated: Bool) {
-        if let value = value as? ChatPresentationInterfaceState, let chatInteraction = self.chatInteraction  {
-            let result = touchBarChatItems(presentation: value, layout: chatInteraction.context.sharedContext.layout, isKeyWindow: textView.window?.isKeyWindow ?? false)
-            self.defaultItemIdentifiers = result.items
-            self.escapeKeyReplacementItemIdentifier = result.escapeReplacement
-            self.customizationAllowedItemIdentifiers = self.defaultItemIdentifiers
-            self.textView.updateTouchBarItemIdentifiers()
-            updateUserInterface()
+        if let value = value as? ChatPresentationInterfaceState, let oldValue = oldValue as? ChatPresentationInterfaceState, let chatInteraction = self.chatInteraction  {
+            if !animated  || oldValue.state != value.state || oldValue.effectiveInput.selectionRange.isEmpty != value.effectiveInput.selectionRange.isEmpty || prevIsKeyWindow != textView.window?.isKeyWindow || oldValue.inputQueryResult != value.inputQueryResult || oldValue.selectionState != value.selectionState || oldValue.canInvokeBasicActions != value.canInvokeBasicActions {
+                self.prevIsKeyWindow = textView.window?.isKeyWindow
+                let result = touchBarChatItems(presentation: value, layout: chatInteraction.context.sharedContext.layout, isKeyWindow: textView.window?.isKeyWindow ?? false)
+                self.defaultItemIdentifiers = result.items
+                self.escapeKeyReplacementItemIdentifier = result.escapeReplacement
+                self.customizationAllowedItemIdentifiers = self.defaultItemIdentifiers
+                self.textView.updateTouchBarItemIdentifiers()
+                updateUserInterface()
+            }
         }
     }
     
@@ -382,7 +387,7 @@ class ChatTouchBar: NSTouchBar, NSTouchBarDelegate, Notifable {
         chatInteraction?.updateEditingMessageMedia(mediaExts, true)
     }
     @objc private func cancelMessageEditing() {
-        chatInteraction?.update({$0.withoutEditMessage()})
+        chatInteraction?.cancelEditing()
     }
     @objc private func infoAndAttach(_ sender: Any?) {
         
@@ -606,7 +611,7 @@ class ChatTouchBar: NSTouchBar, NSTouchBarDelegate, Notifable {
             if let result = self.chatInteraction?.presentation.inputQueryResult, let chatInteraction = self.chatInteraction {
                 switch result {
                 case let .stickers(stickers):
-                    return StickersScrubberBarItem(identifier: identifier, context: chatInteraction.context, sendSticker: { [weak self] file in
+                    return StickersScrubberBarItem(identifier: identifier, context: chatInteraction.context, animated: false, sendSticker: { [weak self] file in
                         self?.chatInteraction?.sendAppFile(file, false)
                         self?.chatInteraction?.clearInput()
                     }, entries: stickers.map({.sticker($0.file)}))

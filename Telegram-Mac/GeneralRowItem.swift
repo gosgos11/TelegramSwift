@@ -98,6 +98,10 @@ final class GeneralViewItemCorners : OptionSet {
     public static let topRight = GeneralViewItemCorners(rawValue: (1 << 1))
     public static let bottomLeft = GeneralViewItemCorners(rawValue: (1 << 2))
     public static let bottomRight = GeneralViewItemCorners(rawValue: (1 << 3))
+    
+    static var all: GeneralViewItemCorners {
+        return [.topLeft, .topRight, .bottomLeft, .bottomRight]
+    }
 
 }
 
@@ -135,11 +139,6 @@ enum GeneralViewItemPosition : Equatable {
     
 }
 
-extension NSEdgeInsets : Equatable {
-    public static func ==(lhs: NSEdgeInsets, rhs: NSEdgeInsets) -> Bool {
-        return lhs.left == rhs.left && lhs.top == rhs.top && lhs.right == rhs.right && lhs.bottom == rhs.bottom
-    }
-}
 
 enum GeneralViewType : Equatable {
     case legacy
@@ -306,10 +305,6 @@ class GeneralRowItem: TableRowItem {
     
     override var canBeAnchor: Bool {
         return false
-    }
-    
-    override var isUniqueView: Bool {
-        return true
     }
     
     var blockWidth: CGFloat {
